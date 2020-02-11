@@ -1,4 +1,4 @@
-module LIFO = struct
+module LinkedList = struct
     type 'a t = {value : 'a; mutable pointer : 'a t option ref}
 
     let push (x : 'a) (xs : 'a t) : unit =
@@ -14,7 +14,7 @@ module LIFO = struct
             | Some ptr -> (xs.value, Some ptr)
 
     let print (to_string : 'a -> string) (xs : 'a t) : unit =
-        Printf.fprintf stdout "LIFO (";
+        Printf.fprintf stdout "LinkedList (";
         let rec f (xs : 'a t) : unit =
             Printf.fprintf stdout "%s" (to_string xs.value);
             match !(xs.pointer) with
@@ -28,12 +28,15 @@ module LIFO = struct
 end
 
 let () : unit =
-    let xs : int LIFO.t = {LIFO.value = 0; LIFO.pointer = ref None} in
-    LIFO.push 1 xs;
-    LIFO.push 2 xs;
-    LIFO.push 3 xs;
-    let (x, xs) : (int * int LIFO.t option) = LIFO.pop xs in
+    let xs : int LinkedList.t = {
+        LinkedList.value = 0;
+        LinkedList.pointer = ref None;
+    } in
+    LinkedList.push 1 xs;
+    LinkedList.push 2 xs;
+    LinkedList.push 3 xs;
+    let (x, xs) : (int * int LinkedList.t option) = LinkedList.pop xs in
     (match xs with
         | None -> ()
-        | Some xs -> LIFO.print string_of_int xs);
+        | Some xs -> LinkedList.print string_of_int xs);
     Printf.fprintf stdout "%d\n%!" x
