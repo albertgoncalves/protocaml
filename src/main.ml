@@ -33,7 +33,7 @@ let () : unit =
     LIFO.push 2 xs;
     LIFO.push 3 xs;
     let (x, xs) : (int * int LIFO.t option) = LIFO.pop xs in
-    match xs with
+    (match xs with
         | None -> ()
-        | Some xs -> LIFO.print string_of_int xs;
+        | Some xs -> LIFO.print string_of_int xs);
     Printf.fprintf stdout "%d\n%!" x
