@@ -10,6 +10,10 @@ module LinkedList = struct
         mutable nodes : 'a _node_t;
     }
 
+    let construct (() : unit) : 'a t = {
+        nodes = None;
+    }
+
     let push (l : 'a t) (v : 'a) : unit =
         let next : 'a _node ref = ref {
             value = v;
@@ -66,7 +70,7 @@ module LinkedList = struct
 end
 
 let () : unit =
-    let l : int LinkedList.t = {LinkedList.nodes = None} in
+    let l : int LinkedList.t = LinkedList.construct () in
     for i = 0 to 10 do
         LinkedList.push l i
     done;
