@@ -22,13 +22,12 @@ module LinkedList = struct
         l.nodes <- Some next
 
     let pop (l : 'a t) : 'a option =
-        match l.nodes with
-            | None -> None
-            | Some ptr -> (
-                    let v : 'a = !ptr.value in
-                    l.nodes <- !ptr.next;
-                    Some v
-                )
+        Option.map (
+            fun ptr ->
+                let v : 'a = !ptr.value in
+                l.nodes <- !ptr.next;
+                v
+        ) l.nodes
 
     let pop_at (l : 'a t) (i : int) : 'a option =
         let rec f (prev : 'a _node_t) (current : 'a _node_t)
@@ -52,19 +51,16 @@ module LinkedList = struct
                             )
                         | _ -> None
                 ) in
-        match l.nodes with
-            | None -> None
-            | Some ptr -> f None (Some ptr) !ptr.next i
+        Option.bind l.nodes (fun ptr -> f None (Some ptr) !ptr.next i)
 
     let print (to_string : 'a -> string) (l : 'a t) : unit =
         Printf.fprintf stdout "LinkedList.t        : [";
         let rec f (n : 'a _node_t) : unit =
-            match n with
-                | None -> ()
-                | Some ptr -> (
-                        Printf.fprintf stdout " %s" (to_string !ptr.value);
-                        f !ptr.next
-                    ) in
+            Option.iter (
+                fun ptr ->
+                    Printf.fprintf stdout " %s" (to_string !ptr.value);
+                    f !ptr.next
+            ) n in
         f l.nodes;
         Printf.fprintf stdout "]\n"
 end
