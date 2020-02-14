@@ -1,12 +1,10 @@
 module LinkedList = struct
     type 'a _node = {
         value : 'a;
-        mutable next : 'a _node ref option;
+        mutable next : 'a _node_t;
     }
-
     and 'a _node_t = 'a _node ref option
-
-    type 'a t = {
+    and 'a t = {
         mutable nodes : 'a _node_t;
     }
 
@@ -22,45 +20,43 @@ module LinkedList = struct
         l.nodes <- Some next
 
     let pop (l : 'a t) : 'a option =
-        Option.map (
-            fun ptr ->
-                let v : 'a = !ptr.value in
-                l.nodes <- !ptr.next;
-                v
-        ) l.nodes
+        let f (ptr : 'a _node ref) : 'a =
+            let v : 'a = !ptr.value in
+            l.nodes <- !ptr.next;
+            v in
+        Option.map f l.nodes
 
     let pop_at (l : 'a t) (i : int) : 'a option =
         let rec f (prev : 'a _node_t) (current : 'a _node_t)
             (next : 'a _node_t) : int -> 'a option = function
-            | 0 -> (
-                    match (prev, current, next) with
-                        | (None, Some c, (Some _ as n)) -> (
-                                l.nodes <- n;
-                                Some !c.value
-                            )
-                        | (Some p, Some c, (Some _ as n)) -> (
-                                !p.next <- n;
-                                Some !c.value
-                            )
-                        | _ -> None
-                )
-            | i -> (
-                    match (current, next) with
-                        | (Some _ as c, (Some n as n')) -> (
-                                f c n' !n.next (i - 1)
-                            )
-                        | _ -> None
-                ) in
-        Option.bind l.nodes (fun ptr -> f None (Some ptr) !ptr.next i)
+            | 0 ->
+                (match (prev, current, next) with
+                    | (None, Some c, (Some _ as n)) ->
+                        (
+                            l.nodes <- n;
+                            Some !c.value
+                        )
+                    | (Some p, Some c, (Some _ as n)) ->
+                        (
+                            !p.next <- n;
+                            Some !c.value
+                        )
+                    | _ -> None)
+            | i ->
+                (match (current, next) with
+                    | ((Some _ as c), (Some n as n')) ->
+                        f c n' !n.next (i - 1)
+                    | _ -> None) in
+        let f' (ptr : 'a _node ref) : 'a option =
+            f None (Some ptr) !ptr.next i in
+        Option.bind l.nodes f'
 
     let print (to_string : 'a -> string) (l : 'a t) : unit =
         Printf.fprintf stdout "LinkedList.t        : [";
-        let rec f (n : 'a _node_t) : unit =
-            Option.iter (
-                fun ptr ->
-                    Printf.fprintf stdout " %s" (to_string !ptr.value);
-                    f !ptr.next
-            ) n in
+        let rec f (n : 'a _node_t) : unit = Option.iter f' n
+        and f' (ptr : 'a _node ref) : unit =
+            Printf.fprintf stdout " %s" (to_string !ptr.value);
+            f !ptr.next in
         f l.nodes;
         Printf.fprintf stdout "]\n"
 end
