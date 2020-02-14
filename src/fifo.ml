@@ -11,7 +11,8 @@ module FIFO : FIFO_t = struct
         value : 'a;
         mutable next : 'a _node option;
     }
-    and 'a t = {
+
+    type 'a t = {
         mutable first : 'a _node option;
         mutable last : 'a _node option;
     }
@@ -77,8 +78,13 @@ let () : unit =
     for _ = 0 to 6 do
         f ()
     done;
-    for i = 0 to 10 do
+    FIFO.print string_of_int l;
+    for i = 11 to 20 do
         FIFO.push l i
+    done;
+    FIFO.print string_of_int l;
+    while FIFO.pop l <> None; do
+        ignore (FIFO.pop l)
     done;
     FIFO.print string_of_int l;
     flush stdout
