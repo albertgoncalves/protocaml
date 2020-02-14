@@ -8,16 +8,16 @@ module LinkedList = struct
         mutable nodes : 'a _node_t;
     }
 
-    let construct (() : unit) : 'a t = {
+    let construct () : 'a t = {
         nodes = None;
     }
 
     let push (l : 'a t) (v : 'a) : unit =
-        let next : 'a _node ref = ref {
+        let next : 'a _node ref option = Some (ref {
             value = v;
             next = l.nodes;
-        } in
-        l.nodes <- Some next
+        }) in
+        l.nodes <- next
 
     let pop (l : 'a t) : 'a option =
         let f (ptr : 'a _node ref) : 'a =
@@ -63,17 +63,26 @@ end
 
 let () : unit =
     let l : int LinkedList.t = LinkedList.construct () in
+    let f (i : int) : unit =
+        match LinkedList.pop_at l i with
+            | None -> Printf.fprintf stdout "LinkedList.pop_at %d : None\n" i
+            | Some v ->
+                Printf.fprintf stdout "LinkedList.pop_at %d : Some %d\n" i v in
     for i = 0 to 10 do
         LinkedList.push l i
     done;
-    (match LinkedList.pop l with
-        | None -> Printf.fprintf stdout "LinkedList.pop      : None\n"
-        | Some v -> Printf.fprintf stdout "LinkedList.pop      : Some %d\n" v);
-    (match LinkedList.pop_at l 4 with
-        | None -> Printf.fprintf stdout "LinkedList.pop_at 4 : None\n"
-        | Some v -> Printf.fprintf stdout "LinkedList.pop_at 4 : Some %d\n" v);
-    (match LinkedList.pop_at l 9 with
-        | None -> Printf.fprintf stdout "LinkedList.pop_at 9 : None\n"
-        | Some v -> Printf.fprintf stdout "LinkedList.pop_at 9 : Some %d\n" v);
+    LinkedList.print string_of_int l;
+    f 4;
+    f 2;
+    f 9;
+    LinkedList.print string_of_int l;
+    for _ = 0 to 9 do
+        match LinkedList.pop l with
+            | None -> Printf.fprintf stdout "LinkedList.pop      : None\n"
+            | Some v ->
+                Printf.fprintf stdout "LinkedList.pop      : Some %d\n" v;
+    done;
+    LinkedList.print string_of_int l;
+    LinkedList.push l 11;
     LinkedList.print string_of_int l;
     flush stdout
