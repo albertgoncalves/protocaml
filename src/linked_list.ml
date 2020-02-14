@@ -1,4 +1,13 @@
-module LinkedList = struct
+module type LinkedList_t = sig
+    type _ t
+    val construct : unit -> 'a t
+    val push : 'a t -> 'a -> unit
+    val pop : 'a t -> 'a option
+    val pop_at : 'a t -> int -> 'a option
+    val print : ('a -> string) -> 'a t -> unit
+end
+
+module LinkedList : LinkedList_t = struct
     type 'a _node = {
         value : 'a;
         mutable next : 'a _node_t;
