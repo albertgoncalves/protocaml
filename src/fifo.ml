@@ -71,11 +71,11 @@ let () : unit =
         FIFO.push l i
     done;
     FIFO.print string_of_int l;
-    for _ = 0 to 4 do
+    for _ = 4 downto 0 do
         f ()
     done;
     FIFO.print string_of_int l;
-    for _ = 0 to 6 do
+    for _ = 6 downto 0 do
         f ()
     done;
     FIFO.print string_of_int l;
@@ -84,7 +84,7 @@ let () : unit =
     done;
     FIFO.print string_of_int l;
     while FIFO.pop l <> None; do
-        ignore (FIFO.pop l)
+        ()
     done;
     FIFO.print string_of_int l;
     flush stdout
