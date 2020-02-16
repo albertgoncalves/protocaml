@@ -65,8 +65,12 @@ let () : unit =
         incr i
     done;
     FIFO.print string_of_int l;
-    for _ = 3 downto 0 do
+    for _ = 4 downto 0 do
         f ()
+    done;
+    FIFO.print string_of_int l;
+    while FIFO.push l !i do
+        incr i
     done;
     FIFO.print string_of_int l;
     for _ = 4 downto 0 do
