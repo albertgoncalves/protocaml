@@ -61,11 +61,14 @@ module LinkedList : LinkedList_t = struct
         Option.bind l.first f'
 
     let print (to_string : 'a -> string) (l : 'a t) : unit =
+        let rec f : 'a _node option -> unit = function
+            | None -> ()
+            | Some ptr ->
+                (
+                    Printf.fprintf stdout " %s" (to_string ptr.value);
+                    f ptr.next
+                ) in
         Printf.fprintf stdout "LinkedList.t        : [";
-        let rec f (n : 'a _node option) : unit = Option.iter f' n
-        and f' (ptr : 'a _node) : unit =
-            Printf.fprintf stdout " %s" (to_string ptr.value);
-            f ptr.next in
         f l.first;
         Printf.fprintf stdout "]\n"
 end
