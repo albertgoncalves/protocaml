@@ -9,7 +9,7 @@ end
 module FIFO : FIFO_t = struct
     type 'a t = {
         capacity : int;
-        mutable memory : 'a option array;
+        memory : 'a option array;
         mutable index : int;
         mutable remaining_cap : int
     }
@@ -24,34 +24,31 @@ module FIFO : FIFO_t = struct
     let push (l : 'a t) (v : 'a) : bool =
         if l.remaining_cap = 0 then
             false
-        else
-            (
-                l.memory.(l.index) <- Some v;
-                l.index <- (l.index + 1) mod l.capacity;
-                l.remaining_cap <- l.remaining_cap - 1;
-                true
-            )
+        else (
+            l.memory.(l.index) <- Some v;
+            l.index <- (l.index + 1) mod l.capacity;
+            l.remaining_cap <- l.remaining_cap - 1;
+            true
+        )
 
     let pop (l : 'a t) : 'a option =
         if l.capacity <= l.remaining_cap then
             None
-        else
-            (
-                let i : int = (l.index + l.remaining_cap) mod l.capacity in
-                let v : 'a option = l.memory.(i) in
-                l.memory.(i) <- None;
-                l.remaining_cap <- l.remaining_cap + 1;
-                v
-            )
+        else (
+            let i : int = (l.index + l.remaining_cap) mod l.capacity in
+            let v : 'a option = l.memory.(i) in
+            l.memory.(i) <- None;
+            l.remaining_cap <- l.remaining_cap + 1;
+            v
+        )
 
     let print (to_string : 'a -> string) (l : 'a t) : unit =
-        Printf.fprintf stdout "[";
         let f : 'a option -> unit = function
             | None -> Printf.fprintf stdout " None"
             | Some v -> Printf.fprintf stdout " (Some %s)" (to_string v) in
+        Printf.fprintf stdout "[";
         Array.iter f l.memory;
         Printf.fprintf stdout "]\n"
-
 end
 
 let () : unit =
