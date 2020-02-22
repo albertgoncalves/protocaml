@@ -74,24 +74,27 @@ end
 
 let () : unit =
     let l : int LinkedList.t = LinkedList.construct () in
+    for i = 0 to 10 do
+        LinkedList.push l i
+    done;
+    LinkedList.print string_of_int l;
     let f (i : int) : unit =
         match LinkedList.pop_at l i with
             | None -> Printf.fprintf stdout "LinkedList.pop_at %d : None\n" i
             | Some v ->
                 Printf.fprintf stdout "LinkedList.pop_at %d : Some %d\n" i v in
-    for i = 0 to 10 do
-        LinkedList.push l i
-    done;
-    LinkedList.print string_of_int l;
     f 4;
     f 2;
-    f 9;
+    f 7;
+    f 7;
+    f 1;
+    f 0;
     LinkedList.print string_of_int l;
-    for _ = 0 to 9 do
-        match LinkedList.pop l with
-            | None -> Printf.fprintf stdout "LinkedList.pop      : None\n"
-            | Some v ->
-                Printf.fprintf stdout "LinkedList.pop      : Some %d\n" v;
+    let v : int option ref = ref (LinkedList.pop l) in
+    while !v <> None do
+        let v' : int = Option.get !v in
+        Printf.fprintf stdout "LinkedList.pop      : Some %d\n" v';
+        v := LinkedList.pop l
     done;
     LinkedList.print string_of_int l;
     LinkedList.push l 11;
