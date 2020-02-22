@@ -29,9 +29,9 @@ module LinkedList : LinkedList_t = struct
         l.head <- next
 
     let pop (l : 'a t) : 'a option =
-        let f (ptr : 'a _node) : 'a =
-            let v : 'a = ptr.value in
-            l.head <- ptr.next;
+        let f (node : 'a _node) : 'a =
+            let v : 'a = node.value in
+            l.head <- node.next;
             v in
         Option.map f l.head
 
@@ -56,16 +56,17 @@ module LinkedList : LinkedList_t = struct
                     | ((Some _ as c), (Some n as n')) ->
                         f c n' n.next (i - 1)
                     | _ -> None) in
-        let f' (ptr : 'a _node) : 'a option = f None (Some ptr) ptr.next i in
+        let f' (node : 'a _node) : 'a option =
+            f None (Some node) node.next i in
         Option.bind l.head f'
 
     let print (to_string : 'a -> string) (l : 'a t) : unit =
         let rec f : 'a _node option -> unit = function
             | None -> ()
-            | Some ptr ->
+            | Some node ->
                 (
-                    Printf.fprintf stdout " %s" (to_string ptr.value);
-                    f ptr.next
+                    Printf.fprintf stdout " %s" (to_string node.value);
+                    f node.next
                 ) in
         Printf.fprintf stdout "LinkedList.t        : [";
         f l.head;
