@@ -56,8 +56,7 @@ module LinkedList : LinkedList_t = struct
                     | ((Some _ as c), (Some n as n')) ->
                         f c n' n.next (i - 1)
                     | _ -> None) in
-        let f' (ptr : 'a _node) : 'a option =
-            f None (Some ptr) ptr.next i in
+        let f' (ptr : 'a _node) : 'a option = f None (Some ptr) ptr.next i in
         Option.bind l.head f'
 
     let print (to_string : 'a -> string) (l : 'a t) : unit =
