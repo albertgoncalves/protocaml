@@ -14,26 +14,26 @@ module LinkedList : LinkedList_t = struct
     }
 
     type 'a t = {
-        mutable first : 'a _node option;
+        mutable head : 'a _node option;
     }
 
     let construct () : 'a t = {
-        first = None;
+        head = None;
     }
 
     let push (l : 'a t) (v : 'a) : unit =
         let next : 'a _node option = Some {
             value = v;
-            next = l.first;
+            next = l.head;
         } in
-        l.first <- next
+        l.head <- next
 
     let pop (l : 'a t) : 'a option =
         let f (ptr : 'a _node) : 'a =
             let v : 'a = ptr.value in
-            l.first <- ptr.next;
+            l.head <- ptr.next;
             v in
-        Option.map f l.first
+        Option.map f l.head
 
     let pop_at (l : 'a t) (i : int) : 'a option =
         let rec f (prev : 'a _node option) (current : 'a _node option)
@@ -42,7 +42,7 @@ module LinkedList : LinkedList_t = struct
                 (match (prev, current, next) with
                     | (None, Some c, (Some _ as n)) ->
                         (
-                            l.first <- n;
+                            l.head <- n;
                             Some c.value
                         )
                     | (Some p, Some c, (Some _ as n)) ->
@@ -58,7 +58,7 @@ module LinkedList : LinkedList_t = struct
                     | _ -> None) in
         let f' (ptr : 'a _node) : 'a option =
             f None (Some ptr) ptr.next i in
-        Option.bind l.first f'
+        Option.bind l.head f'
 
     let print (to_string : 'a -> string) (l : 'a t) : unit =
         let rec f : 'a _node option -> unit = function
@@ -69,7 +69,7 @@ module LinkedList : LinkedList_t = struct
                     f ptr.next
                 ) in
         Printf.fprintf stdout "LinkedList.t        : [";
-        f l.first;
+        f l.head;
         Printf.fprintf stdout "]\n"
 end
 
