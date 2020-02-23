@@ -21,28 +21,28 @@ module LinkedList : LinkedList_t = struct
         head = None;
     }
 
-    let push (l : 'a t) (v : 'a) : unit =
+    let push (list_ : 'a t) (v : 'a) : unit =
         let next : 'a _node option = Some {
             value = v;
-            next = l.head;
+            next = list_.head;
         } in
-        l.head <- next
+        list_.head <- next
 
-    let pop (l : 'a t) : 'a option =
+    let pop (list_ : 'a t) : 'a option =
         let f (node : 'a _node) : 'a =
             let v : 'a = node.value in
-            l.head <- node.next;
+            list_.head <- node.next;
             v in
-        Option.map f l.head
+        Option.map f list_.head
 
-    let pop_at (l : 'a t) (i : int) : 'a option =
+    let pop_at (list_ : 'a t) (i : int) : 'a option =
         let rec f (prev : 'a _node option) (current : 'a _node option)
             (next : 'a _node option) : int -> 'a option = function
             | 0 ->
                 (match (prev, current, next) with
                     | (None, Some c, (Some _ as n)) ->
                         (
-                            l.head <- n;
+                            list_.head <- n;
                             Some c.value
                         )
                     | (Some p, Some c, (Some _ as n)) ->
@@ -58,9 +58,9 @@ module LinkedList : LinkedList_t = struct
                     | _ -> None) in
         let f' (node : 'a _node) : 'a option =
             f None (Some node) node.next i in
-        Option.bind l.head f'
+        Option.bind list_.head f'
 
-    let print (to_string : 'a -> string) (l : 'a t) : unit =
+    let print (to_string : 'a -> string) (list_ : 'a t) : unit =
         let rec f : 'a _node option -> unit = function
             | None -> ()
             | Some node ->
@@ -69,18 +69,18 @@ module LinkedList : LinkedList_t = struct
                     f node.next
                 ) in
         Printf.fprintf stdout "LinkedList.t        : [";
-        f l.head;
+        f list_.head;
         Printf.fprintf stdout "]\n"
 end
 
 let () : unit =
-    let l : int LinkedList.t = LinkedList.construct () in
+    let list_ : int LinkedList.t = LinkedList.construct () in
     for i = 0 to 10 do
-        LinkedList.push l i
+        LinkedList.push list_ i
     done;
-    LinkedList.print string_of_int l;
+    LinkedList.print string_of_int list_;
     let f (i : int) : unit =
-        match LinkedList.pop_at l i with
+        match LinkedList.pop_at list_ i with
             | None -> Printf.fprintf stdout "LinkedList.pop_at %d : None\n" i
             | Some v ->
                 Printf.fprintf stdout "LinkedList.pop_at %d : Some %d\n" i v in
@@ -90,14 +90,14 @@ let () : unit =
     f 7;
     f 1;
     f 0;
-    LinkedList.print string_of_int l;
-    let v : int option ref = ref (LinkedList.pop l) in
+    LinkedList.print string_of_int list_;
+    let v : int option ref = ref (LinkedList.pop list_) in
     while !v <> None do
         let v' : int = Option.get !v in
         Printf.fprintf stdout "LinkedList.pop      : Some %d\n" v';
-        v := LinkedList.pop l
+        v := LinkedList.pop list_
     done;
-    LinkedList.print string_of_int l;
-    LinkedList.push l 11;
-    LinkedList.print string_of_int l;
+    LinkedList.print string_of_int list_;
+    LinkedList.push list_ 11;
+    LinkedList.print string_of_int list_;
     flush stdout
