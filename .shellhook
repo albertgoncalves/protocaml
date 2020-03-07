@@ -9,6 +9,10 @@ fi
 
 export WD=$PWD
 
+if [ ! -d "$WD/out" ]; then
+    mkdir "$WD/out"
+fi
+
 runo () {
     ocp-indent "$1" > tmp.ml
     if diff "$1" tmp.ml > /dev/null 2>&1; then
@@ -16,7 +20,11 @@ runo () {
     else
         mv tmp.ml "$1"
     fi
-    ocaml -w +1..66 "$1"
+    if [ -z "$2" ]; then
+        ocaml -w +1..66 "$1"
+    else
+        ocaml -w +1..66 "$1" "$2"
+    fi
 }
 
 export -f runo
