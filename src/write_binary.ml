@@ -1,9 +1,9 @@
+(* NOTE:
+   $ runo src/write_binary.ml out/hello.bin
+   $ xxd out/hello.bin
+   00000000: 4865 6c6c 6f2c 2077 6f72 6c64 21         Hello, world! *)
+
 let () : unit =
-    (* NOTE:
-     *  $ runo src/write_binary.ml out/hello.bin
-     *  $ xxd out/hello.bin
-     *  00000000: 4865 6c6c 6f2c 2077 6f72 6c64 21         Hello, world!
-    *)
     let hex : int array = [|
         0x48;
         0x65;
