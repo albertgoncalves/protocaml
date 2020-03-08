@@ -6,6 +6,7 @@ mkShell {
             ocp-indent
         ])
         shellcheck
+        xxd
     ];
     shellHook = ''
         . .shellhook
