@@ -13,6 +13,13 @@ if [ ! -d "$WD/out" ]; then
     mkdir "$WD/out"
 fi
 
+export ARGS=(
+    -w +1..66 \
+    -I "$BENCHMARK_CMA_PATH" \
+    unix.cma \
+    benchmark.cma
+)
+
 runo () {
     ocp-indent "$1" > tmp.ml
     if diff "$1" tmp.ml > /dev/null 2>&1; then
@@ -21,9 +28,9 @@ runo () {
         mv tmp.ml "$1"
     fi
     if [ -z "$2" ]; then
-        ocaml -w +1..66 "$1"
+        ocaml "${ARGS[@]}" "$1"
     else
-        ocaml -w +1..66 "$1" "$2"
+        ocaml "${ARGS[@]}" "$1" "$2"
     fi
 }
 

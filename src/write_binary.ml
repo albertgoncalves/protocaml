@@ -22,9 +22,9 @@ let () : unit =
     let path : string = Sys.argv.(1) in
     let file : out_channel = open_out_bin path in
     let n : int = Array.length hex in
-    let bytes_ : bytes = Bytes.create n in
+    let buffer : bytes = Bytes.create n in
     for i = 0 to (n - 1) do
-        Bytes.set_uint8 bytes_ i hex.(i);
+        Bytes.set_uint8 buffer i hex.(i);
     done;
-    output_bytes file bytes_;
+    output_bytes file buffer;
     close_out file
