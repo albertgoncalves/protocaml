@@ -1,17 +1,18 @@
 let for_loop (f : (unit -> unit)) (n : int) : unit =
-    for _ = 0 to n do
+    let m : int = n - 1 in
+    for _ = 0 to m do
         f ()
     done
 
 let while_loop (f : (unit -> unit)) (n : int) : unit =
     let i : int ref = ref 0 in
-    while !i <= n do
+    while !i < n do
         f ();
         incr i
     done
 
 let rec rec_loop (f : (unit -> unit)) : (int -> unit) = function
-    | 0 -> f ()
+    | 0 -> ()
     | n ->
         (
             f ();
@@ -19,9 +20,9 @@ let rec rec_loop (f : (unit -> unit)) : (int -> unit) = function
         )
 
 let () : unit =
-    let n : int = 5000 in
+    let n : int = 10000 in
     let args : (float * float) = (10.1, 20.2) in
-    let res = Benchmark.latencyN (20000L : int64) [
+    let res = Benchmark.latencyN (10000L : int64) [
         (
             "for loop",
             (fun (a, b) -> for_loop (fun () -> ignore (a +. b)) n),
@@ -38,5 +39,5 @@ let () : unit =
             args
         );
     ] in
-    print_newline();
+    Printf.fprintf stdout "\n";
     Benchmark.tabulate res
