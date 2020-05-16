@@ -164,7 +164,7 @@ module State = struct
                     )
             done
 
-    let to_nfa (expression : string) : t_pair =
+    let to_nfa (postfix_expression : string) : t_pair =
         let f (stack : t_pair ArrayStack.t) (token : char) : unit =
             if token = '*' then
                 ArrayStack.push (closure (ArrayStack.pop stack)) stack
@@ -178,14 +178,14 @@ module State = struct
                 ArrayStack.push (concat left right) stack
             else
                 ArrayStack.push (from_token token) stack in
-        if expression = "" then
+        if postfix_expression = "" then
             from_epsilon ()
         else
             let stack : t_pair ArrayStack.t = ArrayStack.make () in
-            String.iter (f stack) expression;
+            String.iter (f stack) postfix_expression;
             ArrayStack.pop stack
 
-    let search (nfa : t_pair) (expression : string) : bool =
+    let search (nfa : t_pair) (candidate : string) : bool =
         let states : t ArrayStack.t ref = ref (ArrayStack.make ()) in
         add_next_state nfa.start !states (ArrayStack.make ());
         let f (token : char) : unit =
@@ -204,7 +204,7 @@ module State = struct
                             ()
             done;
             states := next_states in
-        String.iter f expression;
+        String.iter f candidate;
         find_true !states
 end
 
