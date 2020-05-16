@@ -44,18 +44,18 @@ end
 module State = struct
     type t = {
         mutable is_end : bool;
-        mutable transition : t_transition option;
+        mutable transition : transition option;
         epsilon_transitions : t ArrayStack.t;
     }
 
-    and t_transition = {
+    and transition = {
         token : char;
         state : t;
     }
 
-    type t_pair = {
-        start : t;
-        end_ : t;
+    type link = {
+        first : t;
+        last : t;
     }
 
     let make (is_end : bool) : t = {
@@ -73,57 +73,57 @@ module State = struct
             state;
         }
 
-    let from_epsilon () : t_pair =
-        let start : t = make false in
-        let end_ : t = make true in
-        add_epsilon_transition start end_;
+    let from_epsilon () : link =
+        let first : t = make false in
+        let last : t = make true in
+        add_epsilon_transition first last;
         {
-            start;
-            end_;
+            first;
+            last;
         }
 
-    let from_token (token : char) : t_pair =
-        let start : t = make false in
-        let end_ : t = make true in
-        add_transition start end_ token;
+    let from_token (token : char) : link =
+        let first : t = make false in
+        let last : t = make true in
+        add_transition first last token;
         {
-            start;
-            end_;
+            first;
+            last;
         }
 
-    let concat (first : t_pair) (second : t_pair) : t_pair =
-        add_epsilon_transition first.end_ second.start;
-        first.end_.is_end <- false;
+    let concat (a : link) (b : link) : link =
+        add_epsilon_transition a.last b.first;
+        a.last.is_end <- false;
         {
-            start = first.start;
-            end_ = second.end_;
+            first = a.first;
+            last = b.last;
         }
 
-    let union (first : t_pair) (second : t_pair) : t_pair =
-        let start : t = make false in
-        add_epsilon_transition start first.start;
-        add_epsilon_transition start second.start;
-        let end_ : t = make true in
-        add_epsilon_transition first.end_ end_;
-        first.end_.is_end <- false;
-        add_epsilon_transition second.end_ end_;
-        second.end_.is_end <- false;
+    let union (a : link) (b : link) : link =
+        let first : t = make false in
+        add_epsilon_transition first a.first;
+        add_epsilon_transition first b.first;
+        let last : t = make true in
+        add_epsilon_transition a.last last;
+        a.last.is_end <- false;
+        add_epsilon_transition b.last last;
+        b.last.is_end <- false;
         {
-            start;
-            end_;
+            first;
+            last;
         }
 
-    let closure (nfa : t_pair) : t_pair =
-        let start : t = make false in
-        let end_ : t = make true in
-        add_epsilon_transition start end_;
-        add_epsilon_transition start nfa.start;
-        add_epsilon_transition nfa.end_ end_;
-        add_epsilon_transition nfa.end_ nfa.start;
-        nfa.end_.is_end <- false;
+    let closure (nfa : link) : link =
+        let first : t = make false in
+        let last : t = make true in
+        add_epsilon_transition first last;
+        add_epsilon_transition first nfa.first;
+        add_epsilon_transition nfa.last last;
+        add_epsilon_transition nfa.last nfa.first;
+        nfa.last.is_end <- false;
         {
-            start;
-            end_;
+            first;
+            last;
         }
 
     let rec find_state (stack : t ArrayStack.t) (state : t) : bool =
@@ -164,30 +164,30 @@ module State = struct
                     )
             done
 
-    let to_nfa (postfix_expression : string) : t_pair =
-        let f (stack : t_pair ArrayStack.t) (token : char) : unit =
+    let to_nfa (postfix_expression : string) : link =
+        let f (stack : link ArrayStack.t) (token : char) : unit =
             if token = '*' then
                 ArrayStack.push (closure (ArrayStack.pop stack)) stack
             else if token = '|' then
-                let right : t_pair = ArrayStack.pop stack in
-                let left : t_pair = ArrayStack.pop stack in
+                let right : link = ArrayStack.pop stack in
+                let left : link = ArrayStack.pop stack in
                 ArrayStack.push (union left right) stack
             else if token = '.' then
-                let right : t_pair = ArrayStack.pop stack in
-                let left : t_pair = ArrayStack.pop stack in
+                let right : link = ArrayStack.pop stack in
+                let left : link = ArrayStack.pop stack in
                 ArrayStack.push (concat left right) stack
             else
                 ArrayStack.push (from_token token) stack in
         if postfix_expression = "" then
             from_epsilon ()
         else
-            let stack : t_pair ArrayStack.t = ArrayStack.make () in
+            let stack : link ArrayStack.t = ArrayStack.make () in
             String.iter (f stack) postfix_expression;
             ArrayStack.pop stack
 
-    let search (nfa : t_pair) (candidate : string) : bool =
+    let search (nfa : link) (candidate : string) : bool =
         let states : t ArrayStack.t ref = ref (ArrayStack.make ()) in
-        add_next_state nfa.start !states (ArrayStack.make ());
+        add_next_state nfa.first !states (ArrayStack.make ());
         let f (token : char) : unit =
             let next_states : t ArrayStack.t = ArrayStack.make () in
             for i = 0 to !states.ArrayStack.index - 1 do
@@ -211,7 +211,7 @@ end
 let () : unit =
     (* NOTE: Converted from `(a|b)*c`. *)
     let postfix_expression : string = "ab|*c." in
-    let nfa : State.t_pair = State.to_nfa postfix_expression in
+    let nfa : State.link = State.to_nfa postfix_expression in
     Array.iter
         (fun x -> Printf.printf "%s\t%b\n" x (State.search nfa x))
         [|
