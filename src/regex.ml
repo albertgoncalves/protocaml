@@ -1,223 +1,229 @@
 (* NOTE: See
     `https://deniskyashif.com/2019/02/17/implementing-a-regular-expression-engine/`. *)
 
-type 'a _Stack = {
-    contents : 'a option array;
-    mutable index : int;
-}
+module ArrayStack = struct
+    type 'a t = {
+        contents : 'a option array;
+        mutable index : int;
+    }
 
-let new_stack () : 'a _Stack =
-    {
+    let make () : 'a t = {
         contents = Array.make 5 None;
         index = 0;
     }
 
-let push (x : 'a) (xs : 'a _Stack) : unit =
-    xs.contents.(xs.index) <- Some x;
-    xs.index <- xs.index + 1
+    let push (x : 'a) (xs : 'a t) : unit =
+        xs.contents.(xs.index) <- Some x;
+        xs.index <- xs.index + 1
 
-let pop (xs : 'a _Stack) : 'a =
-    if xs.index <> 0 then
-        (
-            xs.index <- xs.index - 1;
-            let x : 'a option = xs.contents.(xs.index) in
-            xs.contents.(xs.index) <- None;
-            match x with
-                | Some y -> y
-                | None -> exit 1
-        )
-    else
-        exit 1
-
-let pop_opt (xs : 'a _Stack) : 'a option =
-    if xs.index <> 0 then
-        (
-            xs.index <- xs.index - 1;
-            let x : 'a option = xs.contents.(xs.index) in
-            xs.contents.(xs.index) <- None;
-            x
-        )
-    else
-        None
-
-type _State = {
-    mutable is_end : bool;
-    transition : (char, _State) Hashtbl.t;
-    epsilon_transitions : _State _Stack;
-}
-
-let new_state (is_end : bool) : _State =
-    {
-        is_end = is_end;
-        transition = Hashtbl.create 1;
-        epsilon_transitions = new_stack ();
-    }
-
-let add_epsilon_transition (state_from : _State) (state : _State) : unit =
-    push state state_from.epsilon_transitions
-
-let add_transition (state_from : _State) (state : _State) (token : char)
-    : unit =
-    Hashtbl.add state_from.transition token state
-
-type _StatePair = {
-    state_start : _State;
-    state_end : _State;
-}
-
-let from_epsilon () : _StatePair =
-    let state_start : _State = new_state false in
-    let state_end : _State = new_state true in
-    add_epsilon_transition state_start state_end;
-    {
-        state_start = state_start;
-        state_end = state_end;
-    }
-
-let from_token (token : char) : _StatePair =
-    let state_start : _State = new_state false in
-    let state_end : _State = new_state true in
-    add_transition state_start state_end token;
-    {
-        state_start = state_start;
-        state_end = state_end;
-    }
-
-let concat (first : _StatePair) (second : _StatePair) : _StatePair =
-    add_epsilon_transition first.state_end second.state_start;
-    first.state_end.is_end <- false;
-    {
-        state_start = first.state_start;
-        state_end = second.state_end;
-    }
-
-let union (first : _StatePair) (second : _StatePair) : _StatePair =
-    let state_start : _State = new_state false in
-    add_epsilon_transition state_start first.state_start;
-    add_epsilon_transition state_start second.state_start;
-    let state_end : _State = new_state true in
-    add_epsilon_transition first.state_end state_end;
-    first.state_end.is_end <- false;
-    add_epsilon_transition second.state_end state_end;
-    second.state_end.is_end <- false;
-    {
-        state_start = state_start;
-        state_end = state_end;
-    }
-
-let closure (nfa : _StatePair) : _StatePair =
-    let state_start : _State = new_state false in
-    let state_end : _State = new_state true in
-    add_epsilon_transition state_start state_end;
-    add_epsilon_transition state_start nfa.state_start;
-    add_epsilon_transition nfa.state_end state_end;
-    add_epsilon_transition nfa.state_end nfa.state_start;
-    nfa.state_end.is_end <- false;
-    {
-        state_start = state_start;
-        state_end = state_end;
-    }
-
-let rec find_state (stack : _State _Stack) (s : _State) : bool =
-    match pop_opt stack with
-        | None -> false
-        | Some x ->
-            if x = s then
-                true
-            else
-                find_state stack s
-
-let rec add_next_state (s : _State) (next_states : _State _Stack)
-    (prev_states : _State _Stack) : unit =
-    if s.epsilon_transitions.index = 0 then
-        push s next_states
-    else
-        Array.iter
+    let pop (xs : 'a t) : 'a =
+        if xs.index <> 0 then
             (
-                fun x ->
-                    match x with
-                        | None -> ()
-                        | Some y ->
-                            if find_state prev_states y then
-                                ()
-                            else
-                                (
-                                    push y prev_states;
-                                    add_next_state y next_states prev_states
-                                )
-            )
-            s.epsilon_transitions.contents
-
-let rec find_true (stack : _State _Stack) : bool =
-    match pop_opt stack with
-        | None -> false
-        | Some x ->
-            if x.is_end then
-                true
-            else
-                find_true stack
-
-let to_nfa (expression : string) : _StatePair =
-    let f (stack : _StatePair _Stack) (token : char) : unit =
-        if token = '*' then
-            push (closure (pop stack)) stack
-        else if token = '|' then
-            (
-                let right : _StatePair = pop stack in
-                let left : _StatePair = pop stack in
-                push (union left right) stack
-            )
-        else if token = '.' then
-            (
-                let right : _StatePair = pop stack in
-                let left : _StatePair = pop stack in
-                push (concat left right) stack
+                xs.index <- xs.index - 1;
+                let x : 'a option = xs.contents.(xs.index) in
+                xs.contents.(xs.index) <- None;
+                match x with
+                    | Some y -> y
+                    | None -> exit 1
             )
         else
-            push (from_token token) stack in
-    if expression = "" then
-        from_epsilon ()
-    else
-        let stack : _StatePair _Stack = new_stack () in
-        String.iter (f stack) expression;
-        pop stack
+            exit 1
 
-let search (nfa : _StatePair) (expression : string) : bool =
-    let states : _State _Stack ref = ref (new_stack ()) in
-    add_next_state nfa.state_start !states (new_stack ());
-    let f (token : char) : unit =
-        let next_states : _State _Stack = new_stack () in
-        Array.iter
+    let pop_opt (xs : 'a t) : 'a option =
+        if xs.index <> 0 then
             (
-                fun x ->
-                    match x with
-                        | None -> ()
-                        | Some y ->
-                            match Hashtbl.find_opt y.transition token with
-                                | None -> ()
-                                | Some z ->
-                                    add_next_state z next_states (new_stack ())
+                xs.index <- xs.index - 1;
+                let x : 'a option = xs.contents.(xs.index) in
+                xs.contents.(xs.index) <- None;
+                x
             )
-            !states.contents;
-        states := next_states in
-    String.iter f expression;
-    find_true !states
+        else
+            None
+end
+
+module State = struct
+    type t = {
+        mutable is_end : bool;
+        mutable transition : t_transition option;
+        epsilon_transitions : t ArrayStack.t;
+    }
+
+    and t_transition = {
+        token : char;
+        state : t;
+    }
+
+    type t_pair = {
+        start : t;
+        end_ : t;
+    }
+
+    let make (is_end : bool) : t = {
+        is_end;
+        transition = None;
+        epsilon_transitions = ArrayStack.make ();
+    }
+
+    let add_epsilon_transition (state_from : t) (state : t) : unit =
+        ArrayStack.push state state_from.epsilon_transitions
+
+    let add_transition (state_from : t) (state : t) (token : char) : unit =
+        state_from.transition <- Some {
+            token;
+            state;
+        }
+
+    let from_epsilon () : t_pair =
+        let start : t = make false in
+        let end_ : t = make true in
+        add_epsilon_transition start end_;
+        {
+            start;
+            end_;
+        }
+
+    let from_token (token : char) : t_pair =
+        let start : t = make false in
+        let end_ : t = make true in
+        add_transition start end_ token;
+        {
+            start;
+            end_;
+        }
+
+    let concat (first : t_pair) (second : t_pair) : t_pair =
+        add_epsilon_transition first.end_ second.start;
+        first.end_.is_end <- false;
+        {
+            start = first.start;
+            end_ = second.end_;
+        }
+
+    let union (first : t_pair) (second : t_pair) : t_pair =
+        let start : t = make false in
+        add_epsilon_transition start first.start;
+        add_epsilon_transition start second.start;
+        let end_ : t = make true in
+        add_epsilon_transition first.end_ end_;
+        first.end_.is_end <- false;
+        add_epsilon_transition second.end_ end_;
+        second.end_.is_end <- false;
+        {
+            start;
+            end_;
+        }
+
+    let closure (nfa : t_pair) : t_pair =
+        let start : t = make false in
+        let end_ : t = make true in
+        add_epsilon_transition start end_;
+        add_epsilon_transition start nfa.start;
+        add_epsilon_transition nfa.end_ end_;
+        add_epsilon_transition nfa.end_ nfa.start;
+        nfa.end_.is_end <- false;
+        {
+            start;
+            end_;
+        }
+
+    let rec find_state (stack : t ArrayStack.t) (state : t) : bool =
+        match ArrayStack.pop_opt stack with
+            | None -> false
+            | Some x ->
+                if x = state then
+                    true
+                else
+                    find_state stack state
+
+    let rec find_true (stack : t ArrayStack.t) : bool =
+        match ArrayStack.pop_opt stack with
+            | None -> false
+            | Some x ->
+                if x.is_end then
+                    true
+                else
+                    find_true stack
+
+    let rec add_next_state
+            (state : t)
+            (next_states : t ArrayStack.t)
+            (prev_states : t ArrayStack.t) : unit =
+        if state.epsilon_transitions.ArrayStack.index = 0 then
+            ArrayStack.push state next_states
+        else
+            for i = 0 to state.epsilon_transitions.ArrayStack.index - 1 do
+                let x : t =
+                    Option.get
+                        state.epsilon_transitions.ArrayStack.contents.(i) in
+                if find_state prev_states x then
+                    ()
+                else
+                    (
+                        ArrayStack.push x prev_states;
+                        add_next_state x next_states prev_states
+                    )
+            done
+
+    let to_nfa (expression : string) : t_pair =
+        let f (stack : t_pair ArrayStack.t) (token : char) : unit =
+            if token = '*' then
+                ArrayStack.push (closure (ArrayStack.pop stack)) stack
+            else if token = '|' then
+                let right : t_pair = ArrayStack.pop stack in
+                let left : t_pair = ArrayStack.pop stack in
+                ArrayStack.push (union left right) stack
+            else if token = '.' then
+                let right : t_pair = ArrayStack.pop stack in
+                let left : t_pair = ArrayStack.pop stack in
+                ArrayStack.push (concat left right) stack
+            else
+                ArrayStack.push (from_token token) stack in
+        if expression = "" then
+            from_epsilon ()
+        else
+            let stack : t_pair ArrayStack.t = ArrayStack.make () in
+            String.iter (f stack) expression;
+            ArrayStack.pop stack
+
+    let search (nfa : t_pair) (expression : string) : bool =
+        let states : t ArrayStack.t ref = ref (ArrayStack.make ()) in
+        add_next_state nfa.start !states (ArrayStack.make ());
+        let f (token : char) : unit =
+            let next_states : t ArrayStack.t = ArrayStack.make () in
+            for i = 0 to !states.ArrayStack.index - 1 do
+                let x : t = Option.get  !states.ArrayStack.contents.(i) in
+                match x.transition with
+                    | None -> ()
+                    | Some y ->
+                        if y.token = token then
+                            add_next_state
+                                y.state
+                                next_states
+                                (ArrayStack.make ())
+                        else
+                            ()
+            done;
+            states := next_states in
+        String.iter f expression;
+        find_true !states
+end
 
 let () : unit =
     (* NOTE: Converted from `(a|b)*c`. *)
     let postfix_expression : string = "ab|*c." in
-    let nfa : _StatePair = to_nfa postfix_expression in
-    [|
-        "c";
-        "ac";
-        "bc";
-        "abc";
-        "bac";
-        "aabbc";
-        "cc";
-        "cab";
-        "cba";
-        "cc";
-    |]
-    |> Array.iter (fun x -> Printf.fprintf stdout "%s\t%b\n" x (search nfa x));
+    let nfa : State.t_pair = State.to_nfa postfix_expression in
+    Array.iter
+        (fun x -> Printf.printf "%s\t%b\n" x (State.search nfa x))
+        [|
+            "c";
+            "ac";
+            "bc";
+            "abc";
+            "bac";
+            "aabbc";
+            "cc";
+            "cab";
+            "cba";
+            "cc";
+        |];
     flush stdout
