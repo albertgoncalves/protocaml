@@ -3,18 +3,33 @@
 
 module ArrayStack = struct
     type 'a t = {
-        contents : 'a option array;
+        mutable contents : 'a option array;
+        mutable capacity : int;
         mutable index : int;
     }
 
-    let make () : 'a t = {
-        contents = Array.make 5 None;
-        index = 0;
-    }
+    let make () : 'a t =
+        let capacity : int = 2 in
+        {
+            contents = Array.make capacity None;
+            capacity;
+            index = 0;
+        }
+
+    let grow (xs : 'a t) : unit =
+        let capacity = xs.capacity * 2 in
+        let contents = Array.make capacity None in
+        Array.blit xs.contents 0 contents 0 xs.capacity;
+        xs.capacity <- capacity;
+        xs.contents <- contents
 
     let push (x : 'a) (xs : 'a t) : unit =
         xs.contents.(xs.index) <- Some x;
-        xs.index <- xs.index + 1
+        xs.index <- xs.index + 1;
+        if xs.index = xs.capacity then
+            grow xs
+        else
+            ()
 
     let pop (xs : 'a t) : 'a =
         if xs.index <> 0 then
@@ -39,6 +54,24 @@ module ArrayStack = struct
             )
         else
             None
+
+    let contains (xs : 'a t) (f : 'a -> bool) : bool =
+        let n : int = xs.index in
+        if n = 0 then
+            false
+        else
+            (
+                let result : bool ref = ref false in
+                let i : int ref = ref 0 in
+                while (not !result) && (!i < n) do
+                    if f (Option.get xs.contents.(!i)) then
+                        result := true
+                    else
+                        ();
+                    incr i
+                done;
+                !result
+            )
 end
 
 module State = struct
@@ -67,36 +100,17 @@ module State = struct
     let add_epsilon_transition (state_from : t) (state : t) : unit =
         ArrayStack.push state state_from.epsilon_transitions
 
-    let add_transition (state_from : t) (state : t) (token : char) : unit =
-        state_from.transition <- Some {
-            token;
-            state;
-        }
-
-    let from_epsilon () : link =
+    let closure (nfa : link) : link =
         let first : t = make false in
         let last : t = make true in
         add_epsilon_transition first last;
+        add_epsilon_transition first nfa.first;
+        add_epsilon_transition nfa.last last;
+        add_epsilon_transition nfa.last nfa.first;
+        nfa.last.is_end <- false;
         {
             first;
             last;
-        }
-
-    let from_token (token : char) : link =
-        let first : t = make false in
-        let last : t = make true in
-        add_transition first last token;
-        {
-            first;
-            last;
-        }
-
-    let concat (a : link) (b : link) : link =
-        add_epsilon_transition a.last b.first;
-        a.last.is_end <- false;
-        {
-            first = a.first;
-            last = b.last;
         }
 
     let union (a : link) (b : link) : link =
@@ -113,56 +127,25 @@ module State = struct
             last;
         }
 
-    let closure (nfa : link) : link =
+    let concat (a : link) (b : link) : link =
+        add_epsilon_transition a.last b.first;
+        a.last.is_end <- false;
+        {
+            first = a.first;
+            last = b.last;
+        }
+
+    let from_token (token : char) : link =
         let first : t = make false in
         let last : t = make true in
-        add_epsilon_transition first last;
-        add_epsilon_transition first nfa.first;
-        add_epsilon_transition nfa.last last;
-        add_epsilon_transition nfa.last nfa.first;
-        nfa.last.is_end <- false;
+        first.transition <- Some {
+            token;
+            state = last;
+        };
         {
             first;
             last;
         }
-
-    let rec find_state (stack : t ArrayStack.t) (state : t) : bool =
-        match ArrayStack.pop_opt stack with
-            | None -> false
-            | Some x ->
-                if x = state then
-                    true
-                else
-                    find_state stack state
-
-    let rec find_end (stack : t ArrayStack.t) : bool =
-        match ArrayStack.pop_opt stack with
-            | None -> false
-            | Some x ->
-                if x.is_end then
-                    true
-                else
-                    find_end stack
-
-    let rec add_next_state
-            (state : t)
-            (next_states : t ArrayStack.t)
-            (prev_states : t ArrayStack.t) : unit =
-        if state.epsilon_transitions.ArrayStack.index = 0 then
-            ArrayStack.push state next_states
-        else
-            for i = 0 to state.epsilon_transitions.ArrayStack.index - 1 do
-                let x : t =
-                    Option.get
-                        state.epsilon_transitions.ArrayStack.contents.(i) in
-                if find_state prev_states x then
-                    ()
-                else
-                    (
-                        ArrayStack.push x prev_states;
-                        add_next_state x next_states prev_states
-                    )
-            done
 
     let to_nfa (postfix_expression : string) : link =
         let f (stack : link ArrayStack.t) (token : char) : unit =
@@ -179,11 +162,39 @@ module State = struct
             else
                 ArrayStack.push (from_token token) stack in
         if postfix_expression = "" then
-            from_epsilon ()
+            (
+                let first : t = make false in
+                let last : t = make true in
+                add_epsilon_transition first last;
+                {
+                    first;
+                    last;
+                }
+            )
         else
             let stack : link ArrayStack.t = ArrayStack.make () in
             String.iter (f stack) postfix_expression;
             ArrayStack.pop stack
+
+    let rec add_next_state
+            (state : t)
+            (next_states : t ArrayStack.t)
+            (prev_states : t ArrayStack.t) : unit =
+        if state.epsilon_transitions.ArrayStack.index = 0 then
+            ArrayStack.push state next_states
+        else
+            for i = 0 to state.epsilon_transitions.ArrayStack.index - 1 do
+                let x : t =
+                    Option.get
+                        state.epsilon_transitions.ArrayStack.contents.(i) in
+                if ArrayStack.contains prev_states (fun y -> x = y) then
+                    ()
+                else
+                    (
+                        ArrayStack.push x prev_states;
+                        add_next_state x next_states prev_states
+                    )
+            done
 
     let search (nfa : link) (candidate : string) : bool =
         let states : t ArrayStack.t ref = ref (ArrayStack.make ()) in
@@ -191,7 +202,7 @@ module State = struct
         let f (token : char) : unit =
             let next_states : t ArrayStack.t = ArrayStack.make () in
             for i = 0 to !states.ArrayStack.index - 1 do
-                let x : t = Option.get  !states.ArrayStack.contents.(i) in
+                let x : t = Option.get !states.ArrayStack.contents.(i) in
                 match x.transition with
                     | None -> ()
                     | Some y ->
@@ -205,7 +216,7 @@ module State = struct
             done;
             states := next_states in
         String.iter f candidate;
-        find_end !states
+        ArrayStack.contains !states (fun x -> x.is_end)
 end
 
 let () : unit =
