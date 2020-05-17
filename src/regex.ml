@@ -135,14 +135,14 @@ module State = struct
                 else
                     find_state stack state
 
-    let rec find_true (stack : t ArrayStack.t) : bool =
+    let rec find_end (stack : t ArrayStack.t) : bool =
         match ArrayStack.pop_opt stack with
             | None -> false
             | Some x ->
                 if x.is_end then
                     true
                 else
-                    find_true stack
+                    find_end stack
 
     let rec add_next_state
             (state : t)
@@ -169,13 +169,13 @@ module State = struct
             if token = '*' then
                 ArrayStack.push (closure (ArrayStack.pop stack)) stack
             else if token = '|' then
-                let right : link = ArrayStack.pop stack in
-                let left : link = ArrayStack.pop stack in
-                ArrayStack.push (union left right) stack
+                let b : link = ArrayStack.pop stack in
+                let a : link = ArrayStack.pop stack in
+                ArrayStack.push (union a b) stack
             else if token = '.' then
-                let right : link = ArrayStack.pop stack in
-                let left : link = ArrayStack.pop stack in
-                ArrayStack.push (concat left right) stack
+                let b : link = ArrayStack.pop stack in
+                let a : link = ArrayStack.pop stack in
+                ArrayStack.push (concat a b) stack
             else
                 ArrayStack.push (from_token token) stack in
         if postfix_expression = "" then
@@ -205,7 +205,7 @@ module State = struct
             done;
             states := next_states in
         String.iter f candidate;
-        find_true !states
+        find_end !states
 end
 
 let () : unit =
