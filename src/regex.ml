@@ -9,7 +9,7 @@ module ArrayStack = struct
     }
 
     let make () : 'a t =
-        let capacity : int = 2 in
+        let capacity : int = 4 in
         {
             contents = Array.make capacity None;
             capacity;
@@ -280,22 +280,34 @@ let to_postfix (input : string) : string =
     done;
     Buffer.contents output
 
+let test (pattern : string) (expression : string) (expected : bool) : unit =
+    let nfa : State.link = State.to_nfa (to_postfix (insert_infix pattern)) in
+    if State.search nfa expression = expected then
+        ()
+    else
+        Printf.printf "%-8s @ %-8s != %b\n%!" expression pattern expected
+
 let () : unit =
-    let expression : string = to_postfix (insert_infix "(a|b)*c") in
-    let nfa : State.link = State.to_nfa expression in
     Array.iter
-        (fun x -> Printf.printf "%s\t%b\n" x (State.search nfa x))
+        (fun (a, b, c) -> test a b c)
         [|
-            "c";
-            "ac";
-            "bc";
-            "abc";
-            "bac";
-            "aabbc";
-            "cc";
-            "cab";
-            "cabc";
-            "cba";
-            "cc";
-        |];
-    flush stdout
+            ("(a|b)*c", "c", true);
+            ("(a|b)*c", "ac", true);
+            ("(a|b)*c", "bc", true);
+            ("(a|b)*c", "abc", true);
+            ("(a|b)*c", "bac", true);
+            ("(a|b)*c", "aabbc", true);
+            ("(a|b)*c", "cc", false);
+            ("(a|b)*c", "cab", false);
+            ("(a|b)*c", "cabc", false);
+            ("(a|b)*c", "cba", false);
+            ("(a|b)*c", "cc", false);
+            ("abc", "abc", true);
+            ("abc", "abcd", false);
+            ("a*", "", true);
+            ("a*", "a", true);
+            ("a*", "aaaaaaa", true);
+            ("aa*", "", false);
+            ("aa*", "a", true);
+            ("aa*", "aaaaaaa", true);
+        |]
