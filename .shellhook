@@ -14,11 +14,15 @@ if [ ! -d "$WD/out" ]; then
 fi
 
 export ARGS=(
-    -w +1..66 \
-    -I "$BENCHMARK_CMA_PATH" \
-    unix.cma \
+    -I "$BENCHMARK_CMA_PATH"
+    -unboxed-types
+    -w +1..66
+)
+export LIBS=(
+    unix.cma
     benchmark.cma
 )
+export OCAMLRUNPARAM="a=0,c,o=80"
 
 runo () {
     ocp-indent "$1" > tmp.ml
@@ -28,11 +32,10 @@ runo () {
         mv tmp.ml "$1"
     fi
     if [ -z "$2" ]; then
-        ocaml "${ARGS[@]}" "$1"
+        ocaml "${ARGS[@]}" "${LIBS[@]}" "$1"
     else
-        ocaml "${ARGS[@]}" "$1" "$2"
+        ocaml "${ARGS[@]}" "${LIBS[@]}" "$1" "$2"
     fi
 }
 
-export OCAMLRUNPARAM="a=0,c,o=80"
 export -f runo
