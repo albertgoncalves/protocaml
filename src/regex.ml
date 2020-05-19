@@ -38,7 +38,7 @@ module ArrayStack = struct
                 let x : 'a option = xs.contents.(xs.index) in
                 xs.contents.(xs.index) <- None;
                 match x with
-                    | Some y -> y
+                    | Some x' -> x'
                     | None -> exit 1
             )
         else
@@ -178,15 +178,15 @@ module State = struct
             ArrayStack.push state next_states
         else
             for i = 0 to state.epsilon_transitions.ArrayStack.index - 1 do
-                let x : t =
+                let next_state : t =
                     Option.get
                         state.epsilon_transitions.ArrayStack.contents.(i) in
-                if ArrayStack.contains prev_states (fun y -> x = y) then
+                if ArrayStack.contains prev_states ((=) next_state) then
                     ()
                 else
                     (
-                        ArrayStack.push x prev_states;
-                        add_next_state x next_states prev_states
+                        ArrayStack.push next_state prev_states;
+                        add_next_state next_state next_states prev_states
                     )
             done
 
@@ -196,13 +196,13 @@ module State = struct
         let f (token : char) : unit =
             let next_states : t ArrayStack.t = ArrayStack.make () in
             for i = 0 to !states.ArrayStack.index - 1 do
-                let x : t = Option.get !states.ArrayStack.contents.(i) in
-                match x.transition with
+                let state : t = Option.get !states.ArrayStack.contents.(i) in
+                match state.transition with
                     | None -> ()
-                    | Some y ->
-                        if y.token = token then
+                    | Some transition ->
+                        if transition.token = token then
                             add_next_state
-                                y.state
+                                transition.state
                                 next_states
                                 (ArrayStack.make ())
                         else
@@ -210,7 +210,7 @@ module State = struct
             done;
             states := next_states in
         String.iter f candidate;
-        ArrayStack.contains !states (fun x -> x.is_end)
+        ArrayStack.contains !states (fun state -> state.is_end)
 end
 
 let insert_infix (input : string) : string =
