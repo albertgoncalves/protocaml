@@ -142,19 +142,6 @@ module State = struct
         }
 
     let to_nfa (postfix_expression : string) : link =
-        let f (stack : link ArrayStack.t) (token : char) : unit =
-            if token = '*' then
-                ArrayStack.push (closure (ArrayStack.pop stack)) stack
-            else if token = '|' then
-                let b : link = ArrayStack.pop stack in
-                let a : link = ArrayStack.pop stack in
-                ArrayStack.push (union a b) stack
-            else if token = '.' then
-                let b : link = ArrayStack.pop stack in
-                let a : link = ArrayStack.pop stack in
-                ArrayStack.push (concat a b) stack
-            else
-                ArrayStack.push (from_token token) stack in
         if postfix_expression = "" then
             (
                 let first : t = make false in
@@ -166,6 +153,19 @@ module State = struct
                 }
             )
         else
+            let f (stack : link ArrayStack.t) (token : char) : unit =
+                if token = '*' then
+                    ArrayStack.push (closure (ArrayStack.pop stack)) stack
+                else if token = '|' then
+                    let b : link = ArrayStack.pop stack in
+                    let a : link = ArrayStack.pop stack in
+                    ArrayStack.push (union a b) stack
+                else if token = '.' then
+                    let b : link = ArrayStack.pop stack in
+                    let a : link = ArrayStack.pop stack in
+                    ArrayStack.push (concat a b) stack
+                else
+                    ArrayStack.push (from_token token) stack in
             let stack : link ArrayStack.t = ArrayStack.make () in
             String.iter (f stack) postfix_expression;
             ArrayStack.pop stack
