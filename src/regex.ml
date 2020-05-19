@@ -199,10 +199,10 @@ module State = struct
                 let state : t = Option.get !states.ArrayStack.contents.(i) in
                 match state.transition with
                     | None -> ()
-                    | Some transition ->
-                        if transition.token = token then
+                    | Some transition' ->
+                        if transition'.token = token then
                             add_next_state
-                                transition.state
+                                transition'.state
                                 next_states
                                 (ArrayStack.make ())
                         else
