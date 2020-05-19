@@ -34,4 +34,5 @@ runo () {
     fi
 }
 
+export OCAMLRUNPARAM="a=0,c,o=80"
 export -f runo
