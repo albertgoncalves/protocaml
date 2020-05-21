@@ -9,12 +9,16 @@ fi
 
 export WD=$PWD
 
-if [ ! -d "$WD/out" ]; then
-    mkdir "$WD/out"
-fi
+for x in bin build out; do
+    if [ ! -d "$WD/$x" ]; then
+        mkdir "$WD/$x"
+    fi
+done
 
 export ARGS=(
+    -g
     -I "$BENCHMARK_CMA_PATH"
+    -o "$TARGET"
     -unboxed-types
     -w +1..66
 )
@@ -22,20 +26,29 @@ export LIBS=(
     unix.cma
     benchmark.cma
 )
-export OCAMLRUNPARAM="a=0,c,o=80"
+export OCAMLRUNPARAM="a=0,b,c,o=80"
 
 runo () {
+    handle=$(echo "$1" | sed 's/^[a-z\/]*\/\(.*\)\.[a-z]*$/\1/')
+    pin=$PWD
     ocp-indent "$1" > tmp.ml
     if diff "$1" tmp.ml > /dev/null 2>&1; then
         rm tmp.ml
     else
         mv tmp.ml "$1"
     fi
-    if [ -z "$2" ]; then
-        ocaml "${ARGS[@]}" "${LIBS[@]}" "$1"
-    else
-        ocaml "${ARGS[@]}" "${LIBS[@]}" "$1" "$2"
-    fi
+    cp "$1" "$WD/build/$handle.ml"
+    (
+        cd "$WD/build" || return
+        ocamlc "${ARGS[@]}" "${LIBS[@]}" -o "$WD/bin/$handle" "$handle.ml" \
+            || return
+        cd "$pin" || return
+        if [ -z "$2" ]; then
+            "$WD/bin/$handle"
+        else
+            "$WD/bin/$handle" "$2"
+        fi
+    )
 }
 
 export -f runo
