@@ -245,30 +245,9 @@ module State = struct
         ArrayStack.contains !states (fun state -> state.is_end)
 end
 
-let insert_infix (input : string) : string =
-    let n : int = String.length input in
-    let m : int = n - 1 in
-    let output : Buffer.t = Buffer.create ((n * 2) - 1) in
-    for i = 0 to n - 1 do
-        let token : char = input.[i] in
-        Buffer.add_char output token;
-        if (token = '(') || (token = '|') || (m <= i) then
-            ()
-        else
-            let peek : char = input.[i + 1] in
-            if (peek = '|') || (peek = '*') || (peek = '+') || (peek = '?') ||
-               (peek = ')') then
-                ()
-            else
-                (* NOTE: In this implementation, `.` is a concatenation
-                   operator; it is not a wildcard. *)
-                Buffer.add_char output '.'
-    done;
-    Buffer.contents output
-
 module Ops = struct
     let table : (char, int) Hashtbl.t =
-        let table : (char, int) Hashtbl.t = Hashtbl.create 3 in
+        let table : (char, int) Hashtbl.t = Hashtbl.create 5 in
         Hashtbl.add table '|' 0;
         Hashtbl.add table '.' 1;
         Hashtbl.add table '*' 2;
@@ -279,21 +258,53 @@ module Ops = struct
     let precedence (op : char) : int = Hashtbl.find table op
 end
 
+let any (x : 'a) (xs : 'a array) : bool =
+    let result : bool ref = ref false in
+    let n : int = Array.length xs in
+    let i : int ref = ref 0 in
+    while (not !result) && (!i < n) do
+        if x = xs.(!i) then
+            result := true
+        else
+            ();
+        incr i
+    done;
+    !result
+
+let insert_infix (input : string) : string =
+    let n : int = String.length input in
+    let m : int = n - 1 in
+    let output : Buffer.t = Buffer.create ((n * 2) - 1) in
+    for i = 0 to n - 1 do
+        let token : char = input.[i] in
+        Buffer.add_char output token;
+        if (any token [|'('; '|'|]) || (m <= i) then
+            ()
+        else
+            let peek : char = input.[i + 1] in
+            if any peek [|'|'; '*'; '+'; '?'; ')'|] then
+                ()
+            else
+                (* NOTE: In this implementation, `.` is a concatenation
+                   operator; it is not a wildcard. *)
+                Buffer.add_char output '.'
+    done;
+    Buffer.contents output
+
 let to_postfix (input : string) : string =
     let n : int = String.length input in
     let output : Buffer.t = Buffer.create n in
     let stack : char ArrayStack.t = ArrayStack.make () in
     for i = 0 to n - 1 do
         let token : char = input.[i] in
-        if (token = '.') || (token = '|') || (token = '*') then
+        if any token [|'.'; '|'; '*'; '+'; '?'|] then
             let f () : bool =
                 if stack.ArrayStack.index = 0 then
                     false
                 else
                     let peek : char = ArrayStack.peek stack in
-                    (&&)
-                        (peek <> '(')
-                        ((Ops.precedence token) <= (Ops.precedence peek)) in
+                    (peek <> '(')
+                    && ((Ops.precedence token) <= (Ops.precedence peek)) in
             while f () do
                 Buffer.add_char output (ArrayStack.pop stack)
             done;
@@ -381,5 +392,14 @@ let () : unit =
             ("(a|b)+", "ab", true);
             ("(a|b)+", "ba", true);
             ("(a|b)+", "", false);
+            ("(a|b)+(c|d)+", "ac", true);
+            ("(a|b)+(c|d)+", "ad", true);
+            ("(a|b)+(c|d)+", "bc", true);
+            ("(a|b)+(c|d)+", "bd", true);
+            ("(a|b)+(c|d)+", "abcd", true);
+            ("(a|b)+(c|d)+", "bbdc", true);
+            ("(a|b)+(c|d)+", "bcd", true);
+            ("(a|b)+(c|d)+", "bdc", true);
+            ("(ab+)cde", "abbcde", true);
         |];
     Printf.printf "\n%!"
