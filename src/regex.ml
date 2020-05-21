@@ -56,7 +56,7 @@ module ArrayStack = struct
         else
             failwith "ArrayStack.peek @ empty"
 
-    let contains (xs : 'a t) (f : 'a -> bool) : bool =
+    let exists (xs : 'a t) (f : 'a -> bool) : bool =
         let n : int = xs.index in
         if n = 0 then
             false
@@ -216,7 +216,7 @@ module State = struct
                 let next_state : t =
                     Option.get
                         state.epsilon_transitions.ArrayStack.contents.(i) in
-                if ArrayStack.contains prev_states ((=) next_state) then
+                if ArrayStack.exists prev_states ((=) next_state) then
                     ()
                 else
                     (
@@ -246,7 +246,7 @@ module State = struct
             done;
             states := next_states
         done;
-        ArrayStack.contains !states (fun state -> state.is_end)
+        ArrayStack.exists !states (fun state -> state.is_end)
 end
 
 module Ops = struct
@@ -262,19 +262,6 @@ module Ops = struct
     let precedence (op : char) : int = Hashtbl.find table op
 end
 
-let any (x : 'a) (xs : 'a array) : bool =
-    let result : bool ref = ref false in
-    let n : int = Array.length xs in
-    let i : int ref = ref 0 in
-    while (not !result) && (!i < n) do
-        if x = xs.(!i) then
-            result := true
-        else
-            ();
-        incr i
-    done;
-    !result
-
 let insert_infix (input : string) : string =
     let n : int = String.length input in
     let m : int = n - 1 in
@@ -282,11 +269,11 @@ let insert_infix (input : string) : string =
     for i = 0 to n - 1 do
         let token : char = input.[i] in
         Buffer.add_char output token;
-        if (any token [|'('; '|'|]) || (m <= i) then
+        if (token = '(') || (token = '|') || (m <= i) then
             ()
         else
             let peek : char = input.[i + 1] in
-            if any peek [|'|'; '*'; '+'; '?'; ')'|] then
+            if Array.exists ((=) peek) [|'|'; '*'; '+'; '?'; ')'|] then
                 ()
             else
                 (* NOTE: In this implementation, `.` is a concatenation
@@ -301,7 +288,7 @@ let to_postfix (input : string) : string =
     let stack : char ArrayStack.t = ArrayStack.make () in
     for i = 0 to n - 1 do
         let token : char = input.[i] in
-        if any token [|'.'; '|'; '*'; '+'; '?'|] then
+        if Array.exists ((=) token) [|'.'; '|'; '*'; '+'; '?'|] then
             let f () : bool =
                 if stack.ArrayStack.index = 0 then
                     false
