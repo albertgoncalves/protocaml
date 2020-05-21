@@ -98,7 +98,7 @@ module State = struct
         epsilon_transitions = ArrayStack.make ();
     }
 
-    let closure (nfa : link) : link =
+    let maybe_any (nfa : link) : link =
         let first : t = make false in
         let last : t = make true in
         ArrayStack.push last first.epsilon_transitions;
@@ -111,14 +111,38 @@ module State = struct
             last;
         }
 
-    let union (a : link) (b : link) : link =
+    let maybe_one (nfa : link) : link =
         let first : t = make false in
+        let last : t = make true in
+        ArrayStack.push last first.epsilon_transitions;
+        ArrayStack.push nfa.first first.epsilon_transitions;
+        ArrayStack.push last nfa.last.epsilon_transitions;
+        nfa.last.is_end <- false;
+        {
+            first;
+            last;
+        }
+
+    let at_least_one (nfa : link) : link =
+        let first : t = make false in
+        let last : t = make true in
+        ArrayStack.push nfa.first first.epsilon_transitions;
+        ArrayStack.push last nfa.last.epsilon_transitions;
+        ArrayStack.push nfa.first nfa.last.epsilon_transitions;
+        nfa.last.is_end <- false;
+        {
+            first;
+            last;
+        }
+
+    let either (a : link) (b : link) : link =
+        let first : t = make false in
+        let last : t = make true in
         ArrayStack.push a.first first.epsilon_transitions;
         ArrayStack.push b.first first.epsilon_transitions;
-        let last : t = make true in
         ArrayStack.push last a.last.epsilon_transitions;
-        a.last.is_end <- false;
         ArrayStack.push last b.last.epsilon_transitions;
+        a.last.is_end <- false;
         b.last.is_end <- false;
         {
             first;
@@ -157,21 +181,25 @@ module State = struct
                 }
             )
         else
-            let f (stack : link ArrayStack.t) (token : char) : unit =
+            let stack : link ArrayStack.t = ArrayStack.make () in
+            let f (token : char) : unit =
                 if token = '*' then
-                    ArrayStack.push (closure (ArrayStack.pop stack)) stack
+                    ArrayStack.push (ArrayStack.pop stack |> maybe_any) stack
+                else if token = '?' then
+                    ArrayStack.push (ArrayStack.pop stack |> maybe_one) stack
+                else if token = '+' then
+                    ArrayStack.push (ArrayStack.pop stack |> at_least_one) stack
                 else if token = '|' then
                     let b : link = ArrayStack.pop stack in
                     let a : link = ArrayStack.pop stack in
-                    ArrayStack.push (union a b) stack
+                    ArrayStack.push (either a b) stack
                 else if token = '.' then
                     let b : link = ArrayStack.pop stack in
                     let a : link = ArrayStack.pop stack in
                     ArrayStack.push (concat a b) stack
                 else
                     ArrayStack.push (from_token token) stack in
-            let stack : link ArrayStack.t = ArrayStack.make () in
-            String.iter (f stack) postfix_expression;
+            String.iter f postfix_expression;
             ArrayStack.pop stack
 
     let rec add_next_state
@@ -228,7 +256,8 @@ let insert_infix (input : string) : string =
             ()
         else
             let peek : char = input.[i + 1] in
-            if (peek = '*') || (peek = '|') || (peek = ')') then
+            if (peek = '|') || (peek = '*') || (peek = '+') || (peek = '?') ||
+               (peek = ')') then
                 ()
             else
                 (* NOTE: In this implementation, `.` is a concatenation
@@ -243,6 +272,8 @@ module Ops = struct
         Hashtbl.add table '|' 0;
         Hashtbl.add table '.' 1;
         Hashtbl.add table '*' 2;
+        Hashtbl.add table '+' 3;
+        Hashtbl.add table '?' 4;
         table
 
     let precedence (op : char) : int = Hashtbl.find table op
@@ -306,12 +337,44 @@ let () : unit =
             ("(a|b)*c", "cabc", false);
             ("(a|b)*c", "cba", false);
             ("(a|b)*c", "cc", false);
+            ("(a|b)?c", "c", true);
+            ("(a|b)?c", "ac", true);
+            ("(a|b)?c", "bc", true);
+            ("(a|b)?c", "abc", false);
+            ("(a|b)?c", "bac", false);
+            ("(a|b)?c", "aabbc", false);
+            ("(a|b)?c", "cc", false);
+            ("(a|b)?c", "cab", false);
+            ("(a|b)?c", "cabc", false);
+            ("(a|b)?c", "cba", false);
+            ("(a|b)?c", "cc", false);
             ("abc", "abc", true);
             ("abc", "abcd", false);
+            ("a", "", false);
+            ("a", "a", true);
+            ("a", "aaaaaaa", false);
             ("a*", "", true);
             ("a*", "a", true);
             ("a*", "aaaaaaa", true);
             ("aa*", "", false);
             ("aa*", "a", true);
             ("aa*", "aaaaaaa", true);
-        |]
+            ("a?", "a", true);
+            ("a?", "aa", false);
+            ("a?", "", true);
+            ("a?", "b", false);
+            ("a?", "ba", false);
+            ("a?", "ab", false);
+            ("a+", "a", true);
+            ("a+", "aa", true);
+            ("a+", "", false);
+            ("a+", "b", false);
+            ("a+", "ba", false);
+            ("a+", "ab", false);
+            ("(a|b)+", "a", true);
+            ("(a|b)+", "b", true);
+            ("(a|b)+", "ab", true);
+            ("(a|b)+", "ba", true);
+            ("(a|b)+", "", false);
+        |];
+    Printf.printf "\n%!"
