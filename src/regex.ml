@@ -39,18 +39,22 @@ module ArrayStack = struct
                 xs.contents.(xs.index) <- None;
                 match x with
                     | Some x' -> x'
-                    | None -> exit 1
+                    | None ->
+                        Printf.sprintf "ArrayStack.pop @ index = %d" xs.index
+                        |> failwith
             )
         else
-            exit 1
+            failwith "ArrayStack.pop @ empty"
 
     let peek (xs : 'a t) : 'a =
         if xs.index <> 0 then
             match xs.contents.(xs.index - 1) with
                 | Some x -> x
-                | None -> exit 1
+                | None ->
+                    Printf.sprintf "ArrayStack.peek @ index = %d" xs.index
+                    |> failwith
         else
-            exit 1
+            failwith "ArrayStack.peek @ empty"
 
     let contains (xs : 'a t) (f : 'a -> bool) : bool =
         let n : int = xs.index in
