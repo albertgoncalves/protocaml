@@ -182,13 +182,16 @@ module State = struct
             )
         else
             let stack : link ArrayStack.t = ArrayStack.make () in
-            let f (token : char) : unit =
+            for i = 0 to (String.length postfix_expression) - 1 do
+                let token : char = postfix_expression.[i] in
                 if token = '*' then
                     ArrayStack.push (ArrayStack.pop stack |> maybe_any) stack
                 else if token = '?' then
                     ArrayStack.push (ArrayStack.pop stack |> maybe_one) stack
                 else if token = '+' then
-                    ArrayStack.push (ArrayStack.pop stack |> at_least_one) stack
+                    ArrayStack.push
+                        (ArrayStack.pop stack |> at_least_one)
+                        stack
                 else if token = '|' then
                     let b : link = ArrayStack.pop stack in
                     let a : link = ArrayStack.pop stack in
@@ -198,8 +201,8 @@ module State = struct
                     let a : link = ArrayStack.pop stack in
                     ArrayStack.push (concat a b) stack
                 else
-                    ArrayStack.push (from_token token) stack in
-            String.iter f postfix_expression;
+                    ArrayStack.push (from_token token) stack
+            done;
             ArrayStack.pop stack
 
     let rec add_next_state
@@ -225,7 +228,8 @@ module State = struct
     let search (nfa : link) (candidate : string) : bool =
         let states : t ArrayStack.t ref = ref (ArrayStack.make ()) in
         add_next_state nfa.first !states (ArrayStack.make ());
-        let f (token : char) : unit =
+        for i = 0 to (String.length candidate) - 1 do
+            let token : char = candidate.[i] in
             let next_states : t ArrayStack.t = ArrayStack.make () in
             for i = 0 to !states.ArrayStack.index - 1 do
                 let state : t = Option.get !states.ArrayStack.contents.(i) in
@@ -240,8 +244,8 @@ module State = struct
                         else
                             ()
             done;
-            states := next_states in
-        String.iter f candidate;
+            states := next_states
+        done;
         ArrayStack.contains !states (fun state -> state.is_end)
 end
 
