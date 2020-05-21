@@ -65,7 +65,7 @@ module ArrayStack = struct
                 let result : bool ref = ref false in
                 let i : int ref = ref 0 in
                 while (not !result) && (!i < n) do
-                    if f (Option.get xs.contents.(!i)) then
+                    if Option.get xs.contents.(!i) |> f then
                         result := true
                     else
                         ();
@@ -291,9 +291,9 @@ let to_postfix (input : string) : string =
                     false
                 else
                     let peek : char = ArrayStack.peek stack in
-                    (peek <> '(') && (
-                        (Ops.precedence token) <= (Ops.precedence peek)
-                    ) in
+                    (&&)
+                        (peek <> '(')
+                        ((Ops.precedence token) <= (Ops.precedence peek)) in
             while f () do
                 Buffer.add_char output (ArrayStack.pop stack)
             done;
@@ -316,11 +316,16 @@ let to_postfix (input : string) : string =
     Buffer.contents output
 
 let test (pattern : string) (expression : string) (expected : bool) : unit =
-    let nfa : State.link = State.to_nfa (to_postfix (insert_infix pattern)) in
+    let nfa : State.link =
+        insert_infix pattern |> to_postfix |> State.to_nfa in
     if State.search nfa expression = expected then
-        ()
+        Printf.printf "."
     else
-        Printf.printf "%-8s @ %-8s != %b\n%!" expression pattern expected
+        Printf.printf
+            "\nTest failed @ \027[1m(\"%s\", \"%s\", %b)\027[0m\n"
+            pattern
+            expression
+            expected
 
 let () : unit =
     Array.iter
