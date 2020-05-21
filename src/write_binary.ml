@@ -4,6 +4,10 @@
    00000000: 4865 6c6c 6f2c 2077 6f72 6c64 21         Hello, world! *)
 
 let () : unit =
+    if Array.length Sys.argv <> 2 then
+        exit 0
+    else
+        ();
     let hex : int array = [|
         0x48;
         0x65;
