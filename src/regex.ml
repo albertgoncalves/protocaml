@@ -273,7 +273,7 @@ let insert_infix (input : string) : string =
             ()
         else
             let peek : char = input.[i + 1] in
-            if Array.exists ((=) peek) [|'|'; '*'; '+'; '?'; ')'|] then
+            if Array.mem peek [|'|'; '*'; '+'; '?'; ')'|] then
                 ()
             else
                 (* NOTE: In this implementation, `.` is a concatenation
@@ -288,7 +288,7 @@ let to_postfix (input : string) : string =
     let stack : char ArrayStack.t = ArrayStack.make () in
     for i = 0 to n - 1 do
         let token : char = input.[i] in
-        if Array.exists ((=) token) [|'.'; '|'; '*'; '+'; '?'|] then
+        if Array.mem token [|'.'; '|'; '*'; '+'; '?'|] then
             let f () : bool =
                 if stack.ArrayStack.index = 0 then
                     false
