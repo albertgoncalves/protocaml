@@ -78,11 +78,11 @@ end
 module State = struct
     type t = {
         mutable is_end : bool;
-        mutable transition : transition option;
+        mutable token_transition : token_transition option;
         epsilon_transitions : t ArrayStack.t;
     }
 
-    and transition = {
+    and token_transition = {
         token : char;
         state : t;
     }
@@ -94,55 +94,51 @@ module State = struct
 
     let make () : t = {
         is_end = false;
-        transition = None;
+        token_transition = None;
         epsilon_transitions = ArrayStack.make ();
     }
 
     let maybe_any (nfa : link) : link =
-        let first : t = make () in
-        let last : t = make () in
-        ArrayStack.push last first.epsilon_transitions;
-        ArrayStack.push nfa.first first.epsilon_transitions;
-        ArrayStack.push last nfa.last.epsilon_transitions;
+        let l : link = {
+            first = make ();
+            last = make ();
+        } in
+        ArrayStack.push l.last l.first.epsilon_transitions;
+        ArrayStack.push nfa.first l.first.epsilon_transitions;
+        ArrayStack.push l.last nfa.last.epsilon_transitions;
         ArrayStack.push nfa.first nfa.last.epsilon_transitions;
-        {
-            first;
-            last;
-        }
+        l
 
     let maybe_one (nfa : link) : link =
-        let first : t = make () in
-        let last : t = make () in
-        ArrayStack.push last first.epsilon_transitions;
-        ArrayStack.push nfa.first first.epsilon_transitions;
-        ArrayStack.push last nfa.last.epsilon_transitions;
-        {
-            first;
-            last;
-        }
+        let l : link = {
+            first = make ();
+            last = make ();
+        } in
+        ArrayStack.push l.last l.first.epsilon_transitions;
+        ArrayStack.push nfa.first l.first.epsilon_transitions;
+        ArrayStack.push l.last nfa.last.epsilon_transitions;
+        l
 
     let at_least_one (nfa : link) : link =
-        let first : t = make () in
-        let last : t = make () in
-        ArrayStack.push nfa.first first.epsilon_transitions;
-        ArrayStack.push last nfa.last.epsilon_transitions;
+        let l : link = {
+            first = make ();
+            last = make ();
+        } in
+        ArrayStack.push nfa.first l.first.epsilon_transitions;
+        ArrayStack.push l.last nfa.last.epsilon_transitions;
         ArrayStack.push nfa.first nfa.last.epsilon_transitions;
-        {
-            first;
-            last;
-        }
+        l
 
     let either (a : link) (b : link) : link =
-        let first : t = make () in
-        let last : t = make () in
-        ArrayStack.push a.first first.epsilon_transitions;
-        ArrayStack.push b.first first.epsilon_transitions;
-        ArrayStack.push last a.last.epsilon_transitions;
-        ArrayStack.push last b.last.epsilon_transitions;
-        {
-            first;
-            last;
-        }
+        let l : link = {
+            first = make ();
+            last = make ();
+        } in
+        ArrayStack.push a.first l.first.epsilon_transitions;
+        ArrayStack.push b.first l.first.epsilon_transitions;
+        ArrayStack.push l.last a.last.epsilon_transitions;
+        ArrayStack.push l.last b.last.epsilon_transitions;
+        l
 
     let concat (a : link) (b : link) : link =
         ArrayStack.push b.first a.last.epsilon_transitions;
@@ -152,28 +148,26 @@ module State = struct
         }
 
     let from_token (token : char) : link =
-        let first : t = make () in
-        let last : t = make () in
-        first.transition <- Some {
+        let l : link = {
+            first = make ();
+            last = make ();
+        } in
+        l.first.token_transition <- Some {
             token;
-            state = last;
+            state = l.last;
         };
-        {
-            first;
-            last;
-        }
+        l
 
     let to_nfa (postfix_expression : string) : link =
         if postfix_expression = "" then
             (
-                let first : t = make () in
-                let last : t = make () in
-                last.is_end <- true;
-                ArrayStack.push last first.epsilon_transitions;
-                {
-                    first;
-                    last;
-                }
+                let l : link = {
+                    first = make ();
+                    last = make ();
+                } in
+                l.last.is_end <- true;
+                ArrayStack.push l.last l.first.epsilon_transitions;
+                l
             )
         else
             let stack : link ArrayStack.t = ArrayStack.make () in
@@ -230,7 +224,7 @@ module State = struct
             let next_states : t ArrayStack.t = ArrayStack.make () in
             for i = 0 to !states.ArrayStack.index - 1 do
                 let state : t = Option.get !states.ArrayStack.contents.(i) in
-                match state.transition with
+                match state.token_transition with
                     | None -> ()
                     | Some transition' ->
                         if transition'.token = token then
