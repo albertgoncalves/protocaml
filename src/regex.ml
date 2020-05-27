@@ -79,7 +79,8 @@ module State = struct
     type t = {
         mutable is_end : bool;
         mutable token_transition : token_transition option;
-        epsilon_transitions : t ArrayStack.t;
+        mutable epsilon_next : t option;
+        mutable epsilon_next_split : t option;
     }
 
     and token_transition = {
@@ -95,7 +96,8 @@ module State = struct
     let make () : t = {
         is_end = false;
         token_transition = None;
-        epsilon_transitions = ArrayStack.make ();
+        epsilon_next = None;
+        epsilon_next_split = None;
     }
 
     let maybe_any (nfa : link) : link =
@@ -103,10 +105,10 @@ module State = struct
             first = make ();
             last = make ();
         } in
-        ArrayStack.push l.last l.first.epsilon_transitions;
-        ArrayStack.push nfa.first l.first.epsilon_transitions;
-        ArrayStack.push l.last nfa.last.epsilon_transitions;
-        ArrayStack.push nfa.first nfa.last.epsilon_transitions;
+        l.first.epsilon_next <- Some l.last;
+        l.first.epsilon_next_split <- Some nfa.first;
+        nfa.last.epsilon_next <- Some l.last;
+        nfa.last.epsilon_next_split <- Some nfa.first;
         l
 
     let maybe_one (nfa : link) : link =
@@ -114,9 +116,9 @@ module State = struct
             first = make ();
             last = make ();
         } in
-        ArrayStack.push l.last l.first.epsilon_transitions;
-        ArrayStack.push nfa.first l.first.epsilon_transitions;
-        ArrayStack.push l.last nfa.last.epsilon_transitions;
+        l.first.epsilon_next <- Some l.last;
+        l.first.epsilon_next_split <- Some nfa.first;
+        nfa.last.epsilon_next <- Some l.last;
         l
 
     let at_least_one (nfa : link) : link =
@@ -124,9 +126,9 @@ module State = struct
             first = make ();
             last = make ();
         } in
-        ArrayStack.push nfa.first l.first.epsilon_transitions;
-        ArrayStack.push l.last nfa.last.epsilon_transitions;
-        ArrayStack.push nfa.first nfa.last.epsilon_transitions;
+        l.first.epsilon_next <- Some nfa.first;
+        nfa.last.epsilon_next <- Some l.last;
+        nfa.last.epsilon_next_split <- Some nfa.first;
         l
 
     let either (a : link) (b : link) : link =
@@ -134,14 +136,14 @@ module State = struct
             first = make ();
             last = make ();
         } in
-        ArrayStack.push a.first l.first.epsilon_transitions;
-        ArrayStack.push b.first l.first.epsilon_transitions;
-        ArrayStack.push l.last a.last.epsilon_transitions;
-        ArrayStack.push l.last b.last.epsilon_transitions;
+        l.first.epsilon_next <- Some a.first;
+        l.first.epsilon_next_split <- Some b.first;
+        a.last.epsilon_next <- Some l.last;
+        b.last.epsilon_next <- Some l.last;
         l
 
     let concat (a : link) (b : link) : link =
-        ArrayStack.push b.first a.last.epsilon_transitions;
+        a.last.epsilon_next <- Some b.first;
         {
             first = a.first;
             last = b.last;
@@ -166,7 +168,7 @@ module State = struct
                     last = make ();
                 } in
                 l.last.is_end <- true;
-                ArrayStack.push l.last l.first.epsilon_transitions;
+                l.first.epsilon_next <- Some l.last;
                 l
             )
         else
@@ -200,21 +202,27 @@ module State = struct
             (state : t)
             (next_states : t ArrayStack.t)
             (prev_states : t ArrayStack.t) : unit =
-        if state.epsilon_transitions.ArrayStack.index = 0 then
-            ArrayStack.push state next_states
+        match (state.epsilon_next, state.epsilon_next_split) with
+            | (None, None) -> ArrayStack.push state next_states
+            | (Some next_state, None) | (None, Some next_state) ->
+                add_if_new next_state next_states prev_states
+            | (Some next_a, Some next_b) ->
+                (
+                    add_if_new next_a next_states prev_states;
+                    add_if_new next_b next_states prev_states
+                )
+
+    and add_if_new
+            (state : t)
+            (next_states : t ArrayStack.t)
+            (prev_states : t ArrayStack.t) : unit =
+        if ArrayStack.exists prev_states ((=) state) then
+            ()
         else
-            for i = 0 to state.epsilon_transitions.ArrayStack.index - 1 do
-                let next_state : t =
-                    Option.get
-                        state.epsilon_transitions.ArrayStack.contents.(i) in
-                if ArrayStack.exists prev_states ((=) next_state) then
-                    ()
-                else
-                    (
-                        ArrayStack.push next_state prev_states;
-                        add_next_state next_state next_states prev_states
-                    )
-            done
+            (
+                ArrayStack.push state prev_states;
+                add_next_state state next_states prev_states
+            )
 
     let search (nfa : link) (candidate : string) : bool =
         let states : t ArrayStack.t ref = ref (ArrayStack.make ()) in
