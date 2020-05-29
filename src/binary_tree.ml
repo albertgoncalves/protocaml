@@ -19,67 +19,149 @@ module Node (Cmp : Compare) = struct
         right = None;
     }
 
+    let rec get_first (node : ('a, 'b) t) : ('a, 'b) t =
+        match node.left with
+            | None -> node
+            | Some x -> get_first x
+
     let rec insert
             (node : ('a, 'b) t)
             (key : 'a)
             (value : 'b)
             (cost : int) : int =
+        let cost : int = cost + 1 in
         if Cmp.eq key node.key then
             (
                 node.value <- value;
-                cost + 1
+                cost
             )
         else if Cmp.lt key node.key then
             match node.left with
-                | Some left -> (insert [@tailcall]) left key value (cost + 1)
+                | Some left -> (insert [@tailcall]) left key value cost
                 | None ->
                     (
                         node.left <- Some (make key value);
-                        cost + 1
+                        cost
                     )
         else
             match node.right with
-                | Some right -> (insert [@tailcall]) right key value (cost + 1)
+                | Some right -> (insert [@tailcall]) right key value cost
                 | None ->
                     (
                         node.right <- Some (make key value);
-                        cost +1
+                        cost
                     )
+
+    let rec delete
+            (parent : ('a, 'b) t)
+            (child : ('a, 'b) t)
+            (left : bool)
+            (key : 'a) : unit =
+        if Cmp.eq key child.key then
+            match (child.left, child.right) with
+                | (None, None) ->
+                    if left then
+                        parent.left <- None
+                    else
+                        parent.right <- None
+                | (Some _, None) ->
+                    if left then
+                        parent.left <- child.left
+                    else
+                        parent.right <- child.left
+                | (None, Some _) ->
+                    if left then
+                        parent.left <- child.right
+                    else
+                        parent.right <- child.right
+                | (Some _, Some right) ->
+                    (
+                        let tip : ('a, 'b) t = get_first right in
+                        tip.left <- child.left;
+                        if left then
+                            parent.left <- child.right
+                        else
+                            parent.right <- child.right
+                    )
+        else if Cmp.lt key child.key then
+            Option.iter
+                (fun x -> (delete [@tailcall]) child x true key)
+                child.left
+        else
+            Option.iter
+                (fun x -> (delete [@tailcall]) child x false key)
+                child.right
 
     let rec find (node : ('a, 'b) t) (key : 'a) : 'b option =
         if Cmp.eq key node.key then
             Some node.value
         else if Cmp.lt key node.key then
-            Option.bind node.left (fun left -> (find [@tailcall]) left key)
+            Option.bind node.left (fun x -> (find [@tailcall]) x key)
         else
-            Option.bind node.right (fun right -> (find [@tailcall]) right key)
+            Option.bind node.right (fun x -> (find [@tailcall]) x key)
+
+    let rec traverse (node : ('a, 'b) t) (stack : ('a * 'b) Queue.t) : unit =
+        Option.iter (fun x -> (traverse [@tailcall]) x stack) node.left;
+        Queue.push (node.key, node.value) stack;
+        Option.iter (fun x -> (traverse [@tailcall]) x stack) node.right
 end
 
 module Tree (Cmp : Compare) = struct
     module Node = Node (Cmp)
 
     type ('a, 'b) t = {
-        mutable root : ('a, 'b) Node.t option;
+        mutable node : ('a, 'b) Node.t option;
         mutable size : int;
     }
 
     let make () : ('a, 'b) t = {
-        root = None;
+        node = None;
         size = 0;
     }
 
     let insert (tree : ('a, 'b) t) (key : 'a) (value : 'b) : int =
         tree.size <- tree.size + 1;
-        match tree.root with
+        match tree.node with
             | Some node -> Node.insert node key value 0
             | None ->
                 (
-                    tree.root <- Some (Node.make key value);
+                    tree.node <- Some (Node.make key value);
                     0
                 )
 
+    let delete (tree : ('a, 'b) t) (key : 'a) : unit =
+        tree.size <- tree.size - 1;
+        match tree.node with
+            | None -> ()
+            | Some node ->
+                if Cmp.eq key node.Node.key then
+                    match (node.Node.left, node.Node.right) with
+                        | (None, None) -> tree.node <- None
+                        | (Some _, None) -> tree.node <- node.Node.left
+                        | (None, Some _) -> tree.node <- node.Node.right
+                        | (Some _, Some right) ->
+                            (
+                                let tip : ('a, 'b) Node.t =
+                                    Node.get_first right in
+                                tip.Node.left <- node.Node.left;
+                                tree.node <- node.Node.right
+                            )
+                else if Cmp.lt key node.Node.key then
+                    Option.iter
+                        (fun x -> Node.delete node x true key)
+                        node.Node.left
+                else
+                    Option.iter
+                        (fun x -> Node.delete node x false key)
+                        node.Node.right
+
     let find (tree : ('a, 'b) t) (key : 'a) : 'b option =
-        Option.bind tree.root (fun node -> Node.find node key)
+        Option.bind tree.node (fun node -> Node.find node key)
+
+    let get_queue (tree : ('a, 'b) t) : ('a * 'b) Queue.t =
+        let stack : ('a * 'b) Queue.t = Queue.create () in
+        Option.iter (fun x -> Node.traverse x stack) tree.node;
+        stack
 end
 
 module CmpInt = struct
@@ -90,20 +172,62 @@ end
 
 module T = Tree (CmpInt)
 
+let print_insert
+        (tree : (int, 'b) T.t)
+        (key : int)
+        (value : 'b) : unit =
+    Printf.printf "insert %2d, cost : %d\n" key (T.insert tree key value)
+
+let print_find (tree : (int, string) T.t) (key : int) : unit =
+    match T.find tree key with
+        | None -> Printf.printf "find %2d : _\n" key
+        | Some value -> Printf.printf "find %2d : \"%s\"\n" key value
+
 let () : unit =
     let tree : (int, string) T.t = T.make () in
-    Printf.printf "insert  2, cost : %d\n" (T.insert tree 2 "two");
-    Printf.printf "insert 10, cost : %d\n" (T.insert tree 10 "ten");
-    Printf.printf "insert  5, cost : %d\n" (T.insert tree 5 "five");
-    Printf.printf "insert  1, cost : %d\n" (T.insert tree 1 "one");
-    Printf.printf "insert  0, cost : %d\n" (T.insert tree 0 "zero");
-    Printf.printf "insert  4, cost : %d\n" (T.insert tree 4 "four");
-    Printf.printf "insert  6, cost : %d\n" (T.insert tree 6 "six");
-    Printf.printf "insert  3, cost : %d\n" (T.insert tree 3 "three");
-    Printf.printf "insert 11, cost : %d\n" (T.insert tree 11 "eleven");
-    Printf.printf "\ntree.size : %d\n" tree.T.size;
-    Option.iter (Printf.printf "\nfind  0   : \"%s\"\n") (T.find tree 0);
-    Option.iter (Printf.printf "find  1   : \"%s\"\n") (T.find tree 1);
-    Option.iter (Printf.printf "find  5   : \"%s\"\n") (T.find tree 5);
-    Option.iter (Printf.printf "find 10   : \"%s\"\n") (T.find tree 10);
+    print_insert tree 0 "zero";
+    print_insert tree 11 "eleven";
+    print_insert tree 4 "four";
+    print_insert tree 5 "five";
+    print_insert tree 2 "two";
+    print_insert tree 10 "ten";
+    print_insert tree 1 "one";
+    print_insert tree 3 "three";
+    print_insert tree 6 "six";
+    print_insert tree 12 "twelve";
+    print_insert tree 8 "eight";
+    print_insert tree 9 "nine";
+    print_insert tree 7 "seven";
+    Printf.printf "\n";
+    print_find tree 2;
+    T.delete tree 2;
+    T.delete tree 12;
+    T.delete tree 0;
+    T.delete tree 8;
+    T.delete tree 7;
+    T.delete tree 11;
+    Printf.printf "\n";
+    print_find tree 0;
+    print_find tree 2;
+    print_find tree 7;
+    print_find tree 8;
+    print_find tree 11;
+    print_find tree 12;
+    Printf.printf "\n";
+    print_find tree 1;
+    print_find tree 3;
+    print_find tree 4;
+    print_find tree 5;
+    print_find tree 6;
+    print_find tree 9;
+    print_find tree 10;
+    Printf.printf "\ntree.size : %d\n\n[\n" tree.T.size;
+    Queue.iter
+        (
+            fun (key, value) ->
+                let value : string = Printf.sprintf "\"%s\"" value in
+                Printf.printf "    (%2d, %8s),\n" key value
+        )
+        (T.get_queue tree);
+    Printf.printf "]\n";
     flush stdout
