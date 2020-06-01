@@ -1,6 +1,6 @@
 (* NOTE:
-   $ runo src/write_binary.ml out/hello.bin
-   $ xxd out/hello.bin
+   $ runo src/write_binary.ml out/hello.txt
+   $ xxd out/hello.txt
    00000000: 4865 6c6c 6f2c 2077 6f72 6c64 21         Hello, world! *)
 
 let () : unit =
