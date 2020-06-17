@@ -15,7 +15,7 @@ for x in bin build out; do
     fi
 done
 
-export ARGS=(
+export FLAGS=(
     -g
     -I "$BENCHMARK_CMA_PATH"
     -o "$TARGET"
@@ -40,7 +40,7 @@ runo () {
     cp "$1" "$WD/build/$handle.ml"
     (
         cd "$WD/build" || return
-        ocamlc "${ARGS[@]}" "${LIBS[@]}" -o "$WD/bin/$handle" "$handle.ml" \
+        ocamlc "${FLAGS[@]}" "${LIBS[@]}" -o "$WD/bin/$handle" "$handle.ml" \
             || return
         cd "$pin" || return
         if [ -z "$2" ]; then
