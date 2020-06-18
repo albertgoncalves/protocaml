@@ -43,10 +43,12 @@ runo () {
         ocamlc "${FLAGS[@]}" "${LIBS[@]}" -o "$WD/bin/$handle" "$handle.ml" \
             || return
         cd "$pin" || return
-        if [ -z "$2" ]; then
-            "$WD/bin/$handle"
-        else
+        if [ -n "$3" ]; then
+            "$WD/bin/$handle" "$2" "$3"
+        elif [ -n "$2" ]; then
             "$WD/bin/$handle" "$2"
+        else
+            "$WD/bin/$handle"
         fi
     )
 }
