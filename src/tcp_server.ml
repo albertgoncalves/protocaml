@@ -1,6 +1,9 @@
-let loop
-        (service : in_channel -> out_channel -> unit)
-        (address : Unix.sockaddr) : unit =
+type channel_t = {
+    input : in_channel;
+    output : out_channel;
+}
+
+let loop (service : channel_t -> unit) (address : Unix.sockaddr) : unit =
     let domain : Unix.socket_domain = Unix.domain_of_sockaddr address in
     let socket : Unix.file_descr = Unix.socket domain Unix.SOCK_STREAM 0 in
     Unix.bind socket address;
@@ -13,37 +16,47 @@ let loop
                 (
                     if Unix.fork () <> 0 then
                         exit 0;
-                    let i : in_channel = Unix.in_channel_of_descr file in
-                    let o : out_channel = Unix.out_channel_of_descr file in
-                    service i o;
-                    close_in i;
-                    close_out o;
+                    let channels : channel_t = {
+                        input = Unix.in_channel_of_descr file;
+                        output = Unix.out_channel_of_descr file;
+                    } in
+                    service channels;
+                    close_in channels.input;
+                    close_out channels.output;
                     exit 0
                 )
             | id ->
                 (
                     Unix.close file;
-                    ignore (Unix.waitpid [] id)
+                    Unix.waitpid [] id |> ignore
                 )
     done
 
-let init_server (service : in_channel -> out_channel -> unit) : unit =
+let init_server (service : channel_t -> unit) : unit =
     if Array.length Sys.argv < 2 then
-        Printf.eprintf "USAGE: $ ./tcp_server <PORT>\n%!"
+        Printf.eprintf "USAGE: $ %s <PORT>\n%!" Sys.argv.(0)
     else
         try
             let port : int = int_of_string Sys.argv.(1) in
             let host_name : string = Unix.gethostname () in
+            Printf.eprintf
+                "INFO: Server running at `%s:%d`\n%!"
+                host_name
+                port;
             let address : Unix.inet_addr =
-                (Unix.gethostbyname (host_name)).Unix.h_addr_list.(0) in
-            loop service (Unix.ADDR_INET (address, port))
-        with Failure(_) ->
+                (host_name |> Unix.gethostbyname).Unix.h_addr_list.(0) in
+            Unix.ADDR_INET (address, port) |> loop service
+        with Failure (_) ->
             Printf.eprintf "ERROR: Bad port number\n"
 
-let to_uppercase (i : in_channel) (o : out_channel) : unit =
+let to_uppercase (channels : channel_t) : unit =
     try
+        Printf.printf "INFO: Client connect\n%!";
         while true do
-            Printf.fprintf o "%s\n%!" (String.uppercase_ascii (input_line i))
+            Printf.fprintf
+                channels.output
+                "%s\n%!"
+                (input_line channels.input |> String.uppercase_ascii)
         done
     with _ ->
         (
