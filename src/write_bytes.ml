@@ -5,9 +5,7 @@
 
 let () : unit =
     if Array.length Sys.argv <> 2 then
-        exit 0
-    else
-        ();
+        exit 0;
     let hex : int array = [|
         0x48;
         0x65;

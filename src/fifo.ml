@@ -45,9 +45,7 @@ module FIFO : FIFO_t = struct
             let v : 'a = node.value in
             queue.first <- node.next;
             if queue.first == queue.last then
-                queue.last <- None
-            else
-                ();
+                queue.last <- None;
             v in
         Option.map f queue.first
 

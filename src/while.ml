@@ -6,9 +6,7 @@ let () : unit =
     while (not !flag) && (!i < n) do
         Printf.printf "%d\n" xs.(!i);
         if !i = 5 then
-            flag := true
-        else
-            ();
+            flag := true;
         incr i
     done;
     flush stdout
