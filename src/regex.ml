@@ -28,8 +28,6 @@ module ArrayStack = struct
         xs.index <- xs.index + 1;
         if xs.index = xs.capacity then
             grow xs
-        else
-            ()
 
     let pop (xs : 'a t) : 'a =
         if xs.index <> 0 then
@@ -66,9 +64,7 @@ module ArrayStack = struct
                 let i : int ref = ref 0 in
                 while (not !result) && (!i < n) do
                     if Option.get xs.contents.(!i) |> f then
-                        result := true
-                    else
-                        ();
+                        result := true;
                     incr i
                 done;
                 !result
@@ -216,9 +212,7 @@ module State = struct
             (state : t)
             (next_states : t ArrayStack.t)
             (prev_states : t ArrayStack.t) : unit =
-        if ArrayStack.exists prev_states ((=) state) then
-            ()
-        else
+        if not (ArrayStack.exists prev_states ((=) state)) then
             (
                 ArrayStack.push state prev_states;
                 add_next_state state next_states prev_states
@@ -240,8 +234,6 @@ module State = struct
                                 transition'.state
                                 next_states
                                 (ArrayStack.make ())
-                        else
-                            ()
             done;
             states := next_states
         done;
@@ -268,13 +260,9 @@ let insert_infix (input : string) : string =
     for i = 0 to n - 1 do
         let token : char = input.[i] in
         Buffer.add_char output token;
-        if (token = '(') || (token = '|') || (m <= i) then
-            ()
-        else
+        if not ((token = '(') || (token = '|') || (m <= i)) then
             let peek : char = input.[i + 1] in
-            if Array.mem peek [|'|'; '*'; '+'; '?'; ')'|] then
-                ()
-            else
+            if not (Array.mem peek [|'|'; '*'; '+'; '?'; ')'|]) then
                 (* NOTE: In this implementation, `.` is a concatenation
                    operator; it is not a wildcard. *)
                 Buffer.add_char output '.'
