@@ -6,6 +6,7 @@ type channel_t = {
 let loop (service : channel_t -> unit) (address : Unix.sockaddr) : unit =
     let domain : Unix.socket_domain = Unix.domain_of_sockaddr address in
     let socket : Unix.file_descr = Unix.socket domain Unix.SOCK_STREAM 0 in
+    Unix.setsockopt socket Unix.SO_REUSEADDR true;
     Unix.bind socket address;
     Unix.listen socket 3;
     while true do
