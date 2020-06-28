@@ -1,75 +1,8 @@
 (* NOTE: See
     `https://deniskyashif.com/2019/02/17/implementing-a-regular-expression-engine/`. *)
 
-module ArrayStack = struct
-    type 'a t = {
-        mutable contents : 'a option array;
-        mutable capacity : int;
-        mutable index : int;
-    }
-
-    let make () : 'a t =
-        let capacity : int = 4 in
-        {
-            contents = Array.make capacity None;
-            capacity;
-            index = 0;
-        }
-
-    let grow (xs : 'a t) : unit =
-        let capacity : int = xs.capacity * 2 in
-        let contents : 'a option array = Array.make capacity None in
-        Array.blit xs.contents 0 contents 0 xs.capacity;
-        xs.capacity <- capacity;
-        xs.contents <- contents
-
-    let push (x : 'a) (xs : 'a t) : unit =
-        xs.contents.(xs.index) <- Some x;
-        xs.index <- xs.index + 1;
-        if xs.index = xs.capacity then
-            grow xs
-
-    let pop (xs : 'a t) : 'a =
-        if xs.index <> 0 then
-            (
-                xs.index <- xs.index - 1;
-                let x : 'a option = xs.contents.(xs.index) in
-                xs.contents.(xs.index) <- None;
-                match x with
-                    | Some x' -> x'
-                    | None ->
-                        Printf.sprintf "ArrayStack.pop @ index = %d" xs.index
-                        |> failwith
-            )
-        else
-            failwith "ArrayStack.pop @ empty"
-
-    let peek (xs : 'a t) : 'a =
-        if xs.index <> 0 then
-            match xs.contents.(xs.index - 1) with
-                | Some x -> x
-                | None ->
-                    Printf.sprintf "ArrayStack.peek @ index = %d" xs.index
-                    |> failwith
-        else
-            failwith "ArrayStack.peek @ empty"
-
-    let exists (xs : 'a t) (f : 'a -> bool) : bool =
-        let n : int = xs.index in
-        if n = 0 then
-            false
-        else
-            (
-                let result : bool ref = ref false in
-                let i : int ref = ref 0 in
-                while (not !result) && (!i < n) do
-                    if Option.get xs.contents.(!i) |> f then
-                        result := true;
-                    incr i
-                done;
-                !result
-            )
-end
+let exists (stack : 'a Stack.t) (f : 'a -> bool) : bool =
+    Stack.fold (fun b x -> b || (f x)) false stack
 
 module State = struct
     type t = {
@@ -89,7 +22,7 @@ module State = struct
         last : t;
     }
 
-    let make () : t = {
+    let create () : t = {
         is_end = false;
         token_transition = None;
         epsilon_next = None;
@@ -98,8 +31,8 @@ module State = struct
 
     let maybe_any (nfa : link) : link =
         let l : link = {
-            first = make ();
-            last = make ();
+            first = create ();
+            last = create ();
         } in
         l.first.epsilon_next <- Some l.last;
         l.first.epsilon_next_split <- Some nfa.first;
@@ -109,8 +42,8 @@ module State = struct
 
     let maybe_one (nfa : link) : link =
         let l : link = {
-            first = make ();
-            last = make ();
+            first = create ();
+            last = create ();
         } in
         l.first.epsilon_next <- Some l.last;
         l.first.epsilon_next_split <- Some nfa.first;
@@ -119,8 +52,8 @@ module State = struct
 
     let at_least_one (nfa : link) : link =
         let l : link = {
-            first = make ();
-            last = make ();
+            first = create ();
+            last = create ();
         } in
         l.first.epsilon_next <- Some nfa.first;
         nfa.last.epsilon_next <- Some l.last;
@@ -129,8 +62,8 @@ module State = struct
 
     let either (a : link) (b : link) : link =
         let l : link = {
-            first = make ();
-            last = make ();
+            first = create ();
+            last = create ();
         } in
         l.first.epsilon_next <- Some a.first;
         l.first.epsilon_next_split <- Some b.first;
@@ -147,8 +80,8 @@ module State = struct
 
     let from_token (token : char) : link =
         let l : link = {
-            first = make ();
-            last = make ();
+            first = create ();
+            last = create ();
         } in
         l.first.token_transition <- Some {
             token;
@@ -160,46 +93,44 @@ module State = struct
         if postfix_expression = "" then
             (
                 let l : link = {
-                    first = make ();
-                    last = make ();
+                    first = create ();
+                    last = create ();
                 } in
                 l.last.is_end <- true;
                 l.first.epsilon_next <- Some l.last;
                 l
             )
         else
-            let stack : link ArrayStack.t = ArrayStack.make () in
+            let stack : link Stack.t = Stack.create () in
             for i = 0 to (String.length postfix_expression) - 1 do
                 let token : char = postfix_expression.[i] in
                 if token = '*' then
-                    ArrayStack.push (ArrayStack.pop stack |> maybe_any) stack
+                    Stack.push (Stack.pop stack |> maybe_any) stack
                 else if token = '?' then
-                    ArrayStack.push (ArrayStack.pop stack |> maybe_one) stack
+                    Stack.push (Stack.pop stack |> maybe_one) stack
                 else if token = '+' then
-                    ArrayStack.push
-                        (ArrayStack.pop stack |> at_least_one)
-                        stack
+                    Stack.push (Stack.pop stack |> at_least_one) stack
                 else if token = '|' then
-                    let b : link = ArrayStack.pop stack in
-                    let a : link = ArrayStack.pop stack in
-                    ArrayStack.push (either a b) stack
+                    let b : link = Stack.pop stack in
+                    let a : link = Stack.pop stack in
+                    Stack.push (either a b) stack
                 else if token = '.' then
-                    let b : link = ArrayStack.pop stack in
-                    let a : link = ArrayStack.pop stack in
-                    ArrayStack.push (concat a b) stack
+                    let b : link = Stack.pop stack in
+                    let a : link = Stack.pop stack in
+                    Stack.push (concat a b) stack
                 else
-                    ArrayStack.push (from_token token) stack
+                    Stack.push (from_token token) stack
             done;
-            let result : link = ArrayStack.pop stack in
+            let result : link = Stack.pop stack in
             result.last.is_end <- true;
             result
 
     let rec add_next_state
             (state : t)
-            (next_states : t ArrayStack.t)
-            (prev_states : t ArrayStack.t) : unit =
+            (next_states : t Stack.t)
+            (prev_states : t Stack.t) : unit =
         match (state.epsilon_next, state.epsilon_next_split) with
-            | (None, None) -> ArrayStack.push state next_states
+            | (None, None) -> Stack.push state next_states
             | (Some next_state, None) | (None, Some next_state) ->
                 add_if_new next_state next_states prev_states
             | (Some next_a, Some next_b) ->
@@ -210,47 +141,35 @@ module State = struct
 
     and add_if_new
             (state : t)
-            (next_states : t ArrayStack.t)
-            (prev_states : t ArrayStack.t) : unit =
-        if not (ArrayStack.exists prev_states ((=) state)) then
+            (next_states : t Stack.t)
+            (prev_states : t Stack.t) : unit =
+        if not (exists prev_states ((=) state)) then
             (
-                ArrayStack.push state prev_states;
+                Stack.push state prev_states;
                 add_next_state state next_states prev_states
             )
 
+    let match_transition
+            (token : char)
+            (next_states : t Stack.t)
+            (state : t) : unit =
+        match state.token_transition with
+            | None -> ()
+            | Some transition ->
+                if transition.token = token then
+                    Stack.create ()
+                    |> add_next_state transition.state next_states
+
     let search (nfa : link) (candidate : string) : bool =
-        let states : t ArrayStack.t ref = ref (ArrayStack.make ()) in
-        add_next_state nfa.first !states (ArrayStack.make ());
+        let states : t Stack.t ref = Stack.create () |> ref in
+        Stack.create () |> add_next_state nfa.first !states;
         for i = 0 to (String.length candidate) - 1 do
             let token : char = candidate.[i] in
-            let next_states : t ArrayStack.t = ArrayStack.make () in
-            for i = 0 to !states.ArrayStack.index - 1 do
-                let state : t = Option.get !states.ArrayStack.contents.(i) in
-                match state.token_transition with
-                    | None -> ()
-                    | Some transition' ->
-                        if transition'.token = token then
-                            add_next_state
-                                transition'.state
-                                next_states
-                                (ArrayStack.make ())
-            done;
+            let next_states : t Stack.t = Stack.create () in
+            Stack.iter (match_transition token next_states) !states;
             states := next_states
         done;
-        ArrayStack.exists !states (fun state -> state.is_end)
-end
-
-module Ops = struct
-    let table : (char, int) Hashtbl.t =
-        let table : (char, int) Hashtbl.t = Hashtbl.create 5 in
-        Hashtbl.add table '|' 0;
-        Hashtbl.add table '.' 1;
-        Hashtbl.add table '*' 2;
-        Hashtbl.add table '+' 3;
-        Hashtbl.add table '?' 4;
-        table
-
-    let precedence (op : char) : int = Hashtbl.find table op
+        exists !states (fun state -> state.is_end)
 end
 
 let insert_infix (input : string) : string =
@@ -269,38 +188,50 @@ let insert_infix (input : string) : string =
     done;
     Buffer.contents output
 
+let ops : (char, int) Hashtbl.t =
+    let ops : (char, int) Hashtbl.t = Hashtbl.create 5 in
+    Hashtbl.add ops '|' 0;
+    Hashtbl.add ops '.' 1;
+    Hashtbl.add ops '*' 2;
+    Hashtbl.add ops '+' 3;
+    Hashtbl.add ops '?' 4;
+    ops
+
+let ops_power : char -> int = Hashtbl.find ops
+
 let to_postfix (input : string) : string =
     let n : int = String.length input in
     let output : Buffer.t = Buffer.create n in
-    let stack : char ArrayStack.t = ArrayStack.make () in
+    let stack : char Stack.t = Stack.create () in
+    let valid (token : char) : bool =
+        if Stack.is_empty stack then
+            false
+        else
+            let peek : char = Stack.top stack in
+            (peek <> '(') && ((ops_power token) <= (ops_power peek)) in
     for i = 0 to n - 1 do
         let token : char = input.[i] in
         if Array.mem token [|'.'; '|'; '*'; '+'; '?'|] then
-            let f () : bool =
-                if stack.ArrayStack.index = 0 then
-                    false
-                else
-                    let peek : char = ArrayStack.peek stack in
-                    (peek <> '(')
-                    && ((Ops.precedence token) <= (Ops.precedence peek)) in
-            while f () do
-                Buffer.add_char output (ArrayStack.pop stack)
-            done;
-            ArrayStack.push token stack
+            (
+                while valid token do
+                    Buffer.add_char output (Stack.pop stack)
+                done;
+                Stack.push token stack
+            )
         else if (token = '(') then
-            ArrayStack.push token stack
+            Stack.push token stack
         else if (token = ')') then
             (
-                while (ArrayStack.peek stack) <> '(' do
-                    Buffer.add_char output (ArrayStack.pop stack)
+                while (Stack.top stack) <> '(' do
+                    Buffer.add_char output (Stack.pop stack)
                 done;
-                ignore (ArrayStack.pop stack)
+                ignore (Stack.pop stack)
             )
         else
             Buffer.add_char output token
     done;
-    while stack.ArrayStack.index <> 0 do
-        Buffer.add_char output (ArrayStack.pop stack)
+    while Stack.is_empty stack |> not do
+        Buffer.add_char output (Stack.pop stack)
     done;
     Buffer.contents output
 
