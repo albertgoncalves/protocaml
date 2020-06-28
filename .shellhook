@@ -16,6 +16,7 @@ for x in bin build out; do
 done
 
 export FLAGS=(
+    -ccopt "-static"
     -g
     -I "$BENCHMARK_CMA_PATH"
     -o "$TARGET"

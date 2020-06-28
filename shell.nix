@@ -1,9 +1,9 @@
 with import <nixpkgs> {};
-mkShell {
+pkgsMusl.mkShell {
     buildInputs = [
         (with ocaml-ng.ocamlPackages_4_10; [
             benchmark
-            ocaml
+            pkgsMusl.ocaml
             ocp-indent
         ])
         shellcheck
