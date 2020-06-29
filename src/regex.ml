@@ -103,23 +103,19 @@ module State = struct
         else
             let stack : link Stack.t = Stack.create () in
             for i = 0 to (String.length postfix_expression) - 1 do
-                let token : char = postfix_expression.[i] in
-                if token = '*' then
-                    Stack.push (Stack.pop stack |> maybe_any) stack
-                else if token = '?' then
-                    Stack.push (Stack.pop stack |> maybe_one) stack
-                else if token = '+' then
-                    Stack.push (Stack.pop stack |> at_least_one) stack
-                else if token = '|' then
-                    let b : link = Stack.pop stack in
-                    let a : link = Stack.pop stack in
-                    Stack.push (either a b) stack
-                else if token = '.' then
-                    let b : link = Stack.pop stack in
-                    let a : link = Stack.pop stack in
-                    Stack.push (concat a b) stack
-                else
-                    Stack.push (from_token token) stack
+                match postfix_expression.[i] with
+                    | '*' -> Stack.push (Stack.pop stack |> maybe_any) stack
+                    | '?' -> Stack.push (Stack.pop stack |> maybe_one) stack
+                    | '+' -> Stack.push (Stack.pop stack |> at_least_one) stack
+                    | '|' ->
+                        let b : link = Stack.pop stack in
+                        let a : link = Stack.pop stack in
+                        Stack.push (either a b) stack
+                    | '.' ->
+                        let b : link = Stack.pop stack in
+                        let a : link = Stack.pop stack in
+                        Stack.push (concat a b) stack
+                    | _ as token -> Stack.push (from_token token) stack
             done;
             let result : link = Stack.pop stack in
             result.last.is_end <- true;
@@ -154,11 +150,9 @@ module State = struct
             (next_states : t Stack.t)
             (state : t) : unit =
         match state.token_transition with
-            | None -> ()
-            | Some transition ->
-                if transition.token = token then
-                    Stack.create ()
-                    |> add_next_state transition.state next_states
+            | Some transition when transition.token = token ->
+                Stack.create () |> add_next_state transition.state next_states
+            | _ -> ()
 
     let search (nfa : link) (candidate : string) : bool =
         let states : t Stack.t ref = Stack.create () |> ref in
@@ -180,24 +174,22 @@ let insert_infix (input : string) : string =
         let token : char = input.[i] in
         Buffer.add_char output token;
         if not ((token = '(') || (token = '|') || (m <= i)) then
-            let peek : char = input.[i + 1] in
-            if not (Array.mem peek [|'|'; '*'; '+'; '?'; ')'|]) then
-                (* NOTE: In this implementation, `.` is a concatenation
-                   operator; it is not a wildcard. *)
-                Buffer.add_char output '.'
+            match input.[i + 1] with
+                | '|' | '*' | '+' | '?' | ')' -> ()
+                | _ ->
+                    (* NOTE: In this implementation, `.` is a concatenation
+                       operator; it is not a wildcard. *)
+                    Buffer.add_char output '.'
     done;
     Buffer.contents output
 
-let ops : (char, int) Hashtbl.t =
-    let ops : (char, int) Hashtbl.t = Hashtbl.create 5 in
-    Hashtbl.add ops '|' 0;
-    Hashtbl.add ops '.' 1;
-    Hashtbl.add ops '*' 2;
-    Hashtbl.add ops '+' 3;
-    Hashtbl.add ops '?' 4;
-    ops
-
-let ops_power : char -> int = Hashtbl.find ops
+let ops_power : char -> int = function
+    | '|' -> 0
+    | '.' -> 1
+    | '*' -> 2
+    | '+' -> 3
+    | '?' -> 4
+    | _  as op -> failwith (Printf.sprintf "Operator %C not supported!" op)
 
 let to_postfix (input : string) : string =
     let n : int = String.length input in
@@ -211,24 +203,23 @@ let to_postfix (input : string) : string =
             (peek <> '(') && ((ops_power token) <= (ops_power peek)) in
     for i = 0 to n - 1 do
         let token : char = input.[i] in
-        if Array.mem token [|'.'; '|'; '*'; '+'; '?'|] then
-            (
-                while valid token do
-                    Buffer.add_char output (Stack.pop stack)
-                done;
-                Stack.push token stack
-            )
-        else if (token = '(') then
-            Stack.push token stack
-        else if (token = ')') then
-            (
-                while (Stack.top stack) <> '(' do
-                    Buffer.add_char output (Stack.pop stack)
-                done;
-                ignore (Stack.pop stack)
-            )
-        else
-            Buffer.add_char output token
+        match input.[i] with
+            | '(' -> Stack.push token stack
+            | ')' ->
+                (
+                    while (Stack.top stack) <> '(' do
+                        Buffer.add_char output (Stack.pop stack)
+                    done;
+                    ignore (Stack.pop stack)
+                )
+            | '.' | '|' | '*' | '+' | '?' ->
+                (
+                    while valid token do
+                        Buffer.add_char output (Stack.pop stack)
+                    done;
+                    Stack.push token stack
+                )
+            | _ -> Buffer.add_char output token
     done;
     while Stack.is_empty stack |> not do
         Buffer.add_char output (Stack.pop stack)

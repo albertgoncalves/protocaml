@@ -35,29 +35,25 @@ module LinkedList : LinkedList_t = struct
             v in
         Option.map f list_.head
 
+    type 'a nopt = 'a _node option
+
     let pop_at (list_ : 'a t) (i : int) : 'a option =
-        let rec f (prev : 'a _node option) (current : 'a _node option)
-            (next : 'a _node option) : int -> 'a option = function
-            | 0 ->
-                (match (prev, current, next) with
-                    | (None, Some c, (Some _ as n)) ->
-                        (
-                            list_.head <- n;
-                            Some c.value
-                        )
-                    | (Some p, Some c, (Some _ as n)) ->
-                        (
-                            p.next <- n;
-                            Some c.value
-                        )
-                    | _ -> None)
-            | i ->
-                (match (current, next) with
-                    | ((Some _ as c), (Some n as n')) ->
-                        f c n' n.next (i - 1)
-                    | _ -> None) in
+        let rec f : (int * 'a nopt * 'a nopt * 'a nopt) -> 'a option = function
+            | (0, None, Some c, (Some _ as n)) ->
+                (
+                    list_.head <- n;
+                    Some c.value
+                )
+            | (0, Some p, Some c, (Some _ as n)) ->
+                (
+                    p.next <- n;
+                    Some c.value
+                )
+            | (0, _, _, _) -> None
+            | (i, _, (Some _ as c), (Some n as n')) -> f (i - 1, c, n', n.next)
+            | _ -> None in
         let f' (node : 'a _node) : 'a option =
-            f None (Some node) node.next i in
+            f (i, None, (Some node), node.next) in
         Option.bind list_.head f'
 
     let print (to_string : 'a -> string) (list_ : 'a t) : unit =

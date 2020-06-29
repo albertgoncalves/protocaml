@@ -6,47 +6,34 @@ type term =
 
 type substitution = (string * term) list
 
-let rec occurs (x : string) (t : term) : bool =
-    match t with
-        | Var y -> x = y
-        | Term (_, s) -> List.exists (occurs x) s
+let rec occurs (x : string) : term -> bool = function
+    | Var y -> x = y
+    | Term (_, s) -> List.exists (occurs x) s
 
-let rec substitute (s : term) (x : string) (t : term) : term =
-    match t with
-        | Var y ->
-            if x = y then
-                s
-            else
-                t
-        | Term (f, u) -> Term (f, List.map (substitute s x) u)
+let rec substitute (s : term) (x : string) : term -> term = function
+    | Var y when x = y -> s
+    | Var _ as t -> t
+    | Term (f, u) -> Term (f, List.map (substitute s x) u)
 
 let apply (s : substitution) (t : term) : term =
     List.fold_right (fun (x, u) -> substitute u x) s t
 
-let rec unify_one (s : term) (t : term) : substitution =
-    match (s, t) with
-        | (Var x, Var y) ->
-            if x = y then
-                []
-            else
-                [(x, t)]
-        | (Term (f, sc), Term (g, tc)) ->
-            if (f = g) && (List.length sc = List.length tc) then
-                unify (List.combine sc tc)
-            else
-                failwith "Not unifiable: head symbol conflict"
-        | ((Var x, (Term (_, _) as t)) | ((Term (_, _) as t), Var x)) ->
-            if occurs x t then
-                failwith "Not unifiable: circularity"
-            else
-                [(x, t)]
+let rec unify_one : (term * term) -> substitution = function
+    | (Var x, Var y) when x = y -> []
+    | (Var x, (Var _ as t)) -> [(x, t)]
+    | (Term (f, sc), Term (g, tc))
+        when (f = g) && (List.length sc = List.length tc) ->
+        unify (List.combine sc tc)
+    | (Term _, Term _) -> failwith "Not unifiable: head symbol conflict"
+    | ((Var x, (Term _ as t)) | ((Term _ as t), Var x)) when occurs x t ->
+        failwith "Not unifiable: circularity"
+    | ((Var x, (Term _ as t)) | ((Term _ as t), Var x)) -> [(x, t)]
 
-and unify (s : (term * term) list) : substitution =
-    match s with
-        | [] -> []
-        | (x, y) :: t ->
-            let t2 = unify t in
-            List.append (unify_one (apply t2 x) (apply t2 y)) t2
+and unify : (term * term) list -> substitution = function
+    | [] -> []
+    | (x, y) :: t ->
+        let t' = unify t in
+        List.rev_append (unify_one ((apply t' x), (apply t' y))) t'
 
 let rec term_to_string : term -> string = function
     | Var x -> Printf.sprintf "Var %s" x
@@ -64,7 +51,8 @@ let pair_to_string ((a, b) : (term * term)) : string =
 let () : unit =
     let terms : (term * term) list =
         [
-            (Var "a", Var "d");
+            (Var "d", Var "a");
+            (Var "a", Term ("f", [Var "e"]));
             (Term ("f", [Var "a"; Var "b"]), Term ("f", [Var "c"; Var "d"]));
         ] in
     Printf.printf "TERMS\n";

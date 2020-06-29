@@ -32,8 +32,8 @@ let at_least_one (xs : 'a list) (p : 'a parser_t) : 'a list parser_t =
             List.concat_map (fun (s', x) -> at_least_zero (x :: xs) p s') xs'
 
 let satisfy (f : (char -> bool)) : char parser_t = function
-    | x :: xs -> if f x then [(xs, x)] else []
-    | [] -> []
+    | x :: xs when f x -> [(xs, x)]
+    | _ -> []
 
 let is_space : char -> bool = function
     | ' ' | '\012' | '\n' | '\r' | '\t' -> true

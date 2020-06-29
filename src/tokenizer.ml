@@ -26,16 +26,14 @@ let get_int (s : string) : int option =
 
 let push_lit (t : tokenizer) (ts : token list ref) (i : int) : unit =
     if 0 < t.len then
-        (
-            let s : string = String.sub t.chars (i - t.len) t.len in
-            match get_int s with
-                | Some n -> ts := (Num n) :: !ts
-                | None ->
-                    (
-                        ts := (Ident s) :: !ts;
-                        t.len <- 0
-                    )
-        )
+        let s : string = String.sub t.chars (i - t.len) t.len in
+        match get_int s with
+            | Some n -> ts := (Num n) :: !ts
+            | None ->
+                (
+                    ts := (Ident s) :: !ts;
+                    t.len <- 0
+                )
 
 let push_str (t : tokenizer) (ts : token list ref) (i : int) : unit =
     if 0 < t.len then

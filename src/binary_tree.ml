@@ -58,31 +58,26 @@ module Node (Cmp : Compare) = struct
             (left : bool)
             (key : 'a) : unit =
         if Cmp.eq key child.key then
-            match (child.left, child.right) with
-                | (None, None) ->
-                    if left then
-                        parent.left <- None
-                    else
-                        parent.right <- None
-                | (Some _, None) ->
-                    if left then
-                        parent.left <- child.left
-                    else
-                        parent.right <- child.left
-                | (None, Some _) ->
-                    if left then
-                        parent.left <- child.right
-                    else
-                        parent.right <- child.right
-                | (Some _, Some right) ->
-                    (
-                        let tip : ('a, 'b) t = get_first right in
-                        tip.left <- child.left;
-                        if left then
+            if left then
+                match (child.left, child.right) with
+                    | (None, None) -> parent.left <- None
+                    | (Some _, None) -> parent.left <- child.left
+                    | (None, Some _) -> parent.left <- child.right
+                    | (Some _, Some right) ->
+                        (
+                            (get_first right).left <- child.left;
                             parent.left <- child.right
-                        else
+                        )
+            else
+                match (child.left, child.right) with
+                    | (None, None) -> parent.right <- None
+                    | (Some _, None) -> parent.right <- child.left
+                    | (None, Some _) -> parent.right <- child.right
+                    | (Some _, Some right) ->
+                        (
+                            (get_first right).left <- child.left;
                             parent.right <- child.right
-                    )
+                        )
         else if Cmp.lt key child.key then
             Option.iter
                 (fun x -> (delete [@tailcall]) child x true key)
