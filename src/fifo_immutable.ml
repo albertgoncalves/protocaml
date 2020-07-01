@@ -32,4 +32,3 @@ let () : unit =
         |> List.fold_left Fifo.push {Fifo.input = []; Fifo.output = []} in
     Fifo.peek xs |> Option.iter (Printf.printf "Fifo.peek %C\n");
     unfold_right Fifo.pop xs |> List.iter (Printf.printf "Fifo.pop %C\n")
-
