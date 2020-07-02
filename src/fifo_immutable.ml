@@ -19,6 +19,8 @@ module Fifo = struct
             | (i, []) -> match List.rev i with
                 | (x :: _) -> Some x
                 | [] -> None
+    let flush (xs : 'a t) : 'a t =
+        {input = []; output = List.rev xs.input |> List.append xs.output}
 end
 
 let rec unfold_right (f : ('b -> ('a * 'b) option)) (b : 'b) : 'a list =
@@ -30,5 +32,7 @@ let () : unit =
     let xs : char Fifo.t =
         ['a'; 'b'; 'c'; 'd'; 'e'; 'f']
         |> List.fold_left Fifo.push {Fifo.input = []; Fifo.output = []} in
-    Fifo.peek xs |> Option.iter (Printf.printf "Fifo.peek %C\n");
-    unfold_right Fifo.pop xs |> List.iter (Printf.printf "Fifo.pop %C\n")
+    Fifo.flush xs |> Fifo.peek |> Option.iter (Printf.printf "Fifo.peek %C\n");
+    Fifo.flush xs
+    |> unfold_right Fifo.pop
+    |> List.iter (Printf.printf "Fifo.pop %C\n")
