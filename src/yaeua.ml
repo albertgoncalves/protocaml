@@ -11,11 +11,17 @@ type expr_t =
 let string_to_chars (s : string) : char list =
     List.init (String.length s) (String.get s)
 
-let is_alpha_upper (c : int) : bool =
-    ((Char.code 'A') <= c) && (c <= (Char.code 'Z'))
+let lower_a : int = Char.code 'a'
 
-let is_alpha_lower (c : int) : bool =
-    ((Char.code 'a') <= c) && (c <= (Char.code 'z'))
+let upper_a : int = Char.code 'A'
+
+let lower_z : int = Char.code 'z'
+
+let upper_z : int = Char.code 'Z'
+
+let is_alpha_upper (c : int) : bool = (upper_a <= c) && (c <= upper_z)
+
+let is_alpha_lower (c : int) : bool = (lower_a <= c) && (c <= lower_z)
 
 let rec skip_space : char list -> char list = function
     | ' ' :: cs -> skip_space cs
@@ -50,7 +56,8 @@ let parse (s : string) : expr_t =
         | (expr, []) -> expr
         | _ -> failwith "parse"
 
+let test_parse (input : string) (expected : expr_t) : unit =
+    assert ((parse input) = expected)
+
 let () : unit =
-    let output : expr_t = parse " ( f A b ) " in
-    let expected : expr_t = Func ('f', [Atom (Var 'A'); Atom (Term 'b')]) in
-    assert (output = expected)
+    test_parse " ( f A b ) " (Func ('f', [Atom (Var 'A'); Atom (Term 'b')]))
