@@ -1,5 +1,3 @@
-(* NOTE: See `https://arxiv.org/abs/cs/0603080v1`. *)
-
 type type_t =
     | Var of char
     | Term of char
