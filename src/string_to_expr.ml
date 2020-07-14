@@ -27,7 +27,7 @@ let rec skip_space : char list -> char list = function
 
 let rec get_func (cs : char list) : (expr_t * char list) =
     let (c, cs') : (char * char list) =
-        match skip_space cs with
+        match cs with
             | c :: cs' when Char.code c |> is_alpha_lower -> (c, cs')
             | _ -> failwith "get_func" in
     let rec f (exprs : expr_t list) : char list -> (expr_t * char list) =
@@ -39,18 +39,17 @@ let rec get_func (cs : char list) : (expr_t * char list) =
                 f (expr :: exprs) cs''' in
     f [] (skip_space cs')
 
-and get_expr (cs : char list) : (expr_t * char list) =
-    match skip_space cs with
-        | [] -> failwith "get_expr"
-        | '(' :: cs' -> get_func cs'
-        | c :: cs' ->
-            match Char.code c with
-                | c' when is_alpha_upper c' -> (Atom (Var c), skip_space cs')
-                | c' when is_alpha_lower c' -> (Atom (Term c), skip_space cs')
-                | _ -> failwith "get_expr"
+and get_expr : char list -> (expr_t * char list) = function
+    | [] -> failwith "get_expr"
+    | '(' :: cs -> get_func (skip_space cs)
+    | c :: cs ->
+        match Char.code c with
+            | c' when is_alpha_upper c' -> (Atom (Var c), skip_space cs)
+            | c' when is_alpha_lower c' -> (Atom (Term c), skip_space cs)
+            | _ -> failwith "get_expr"
 
 let parse (s : string) : expr_t =
-    match string_to_chars s |> get_expr with
+    match string_to_chars s |> skip_space |> get_expr with
         | (expr, []) -> expr
         | _ -> failwith "parse"
 
