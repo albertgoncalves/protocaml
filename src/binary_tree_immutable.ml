@@ -242,7 +242,7 @@ let test_pop () : unit =
             T.Node (
                 -2,
                 "baz qux",
-                T.Leaf,
+                T.Node (-3, "xyzzy thud", T.Leaf, T.Leaf),
                 T.Node (-1, "garply waldo", T.Leaf, T.Leaf)
             ),
             T.Node (
@@ -257,7 +257,7 @@ let test_pop () : unit =
         let x : t = T.Node (
             -2,
             "baz qux",
-            T.Leaf,
+            T.Node (-3, "xyzzy thud", T.Leaf, T.Leaf),
             T.Node (
                 -1,
                 "garply waldo",
