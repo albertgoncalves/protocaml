@@ -22,8 +22,8 @@ module Tree (T : Ord) = struct
     let rec append (l : ('a, 'b) t) (r : ('a, 'b) t) : ('a, 'b) t =
         match (l, r) with
             | (Leaf, Leaf) -> Leaf
-            | (Leaf, _) -> r
-            | (_, Leaf) -> l
+            | (Leaf, Node _) -> r
+            | (Node _, Leaf) -> l
             | (Node _, Node (k2, v2, l2, r2)) ->
                 append (append (insert k2 v2 l) l2) r2
 
