@@ -24,6 +24,7 @@ export FLAGS=(
     -w +1..66
 )
 export LIBS=(
+    str.cma
     unix.cma
     benchmark.cma
 )

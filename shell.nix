@@ -3,8 +3,8 @@ pkgsMusl.mkShell {
     buildInputs = [
         (with ocaml-ng.ocamlPackages_4_10; [
             benchmark
-            pkgsMusl.ocaml
             ocp-indent
+            pkgsMusl.ocaml
         ])
         shellcheck
         xxd
