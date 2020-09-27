@@ -32,7 +32,7 @@ export OCAMLRUNPARAM="a=0,b,c,o=80"
 
 runo () {
     handle=$(echo "$1" | sed 's/^[a-z\/]*\/\(.*\)\.[a-z]*$/\1/')
-    pin=$PWD
+    pwd_=$PWD
     ocp-indent "$1" > tmp.ml
     if diff "$1" tmp.ml > /dev/null 2>&1; then
         rm tmp.ml
@@ -44,7 +44,7 @@ runo () {
         cd "$WD/build" || return
         ocamlc "${FLAGS[@]}" "${LIBS[@]}" -o "$WD/bin/$handle" "$handle.ml" \
             || return
-        cd "$pin" || return
+        cd "$pwd_" || return
         if [ -n "$3" ]; then
             "$WD/bin/$handle" "$2" "$3"
         elif [ -n "$2" ]; then
