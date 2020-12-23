@@ -19,7 +19,6 @@ export FLAGS=(
     -ccopt "-static"
     -g
     -I "$BENCHMARK_CMA_PATH"
-    -o "$TARGET"
     -unboxed-types
     -w +1..66
 )
