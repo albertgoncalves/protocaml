@@ -19,8 +19,11 @@ export FLAGS=(
     -ccopt "-static"
     -g
     -I "$BENCHMARK_CMA_PATH"
+    -nolabels
+    -strict-formats
+    -strict-sequence
     -unboxed-types
-    -w +1..66
+    -w +1..67
 )
 export LIBS=(
     str.cma
