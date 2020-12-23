@@ -20,9 +20,9 @@ let rec rec_loop (f : (unit -> unit)) : (int -> unit) = function
         )
 
 let () : unit =
-    let n : int = 5000 in
+    let n : int = 10000 in
     let args : (float * float) = (10.1, 20.2) in
-    let results : Benchmark.samples = Benchmark.latencyN 5000L [
+    let results : Benchmark.samples = Benchmark.latencyN 10000L [
         (
             "for loop",
             (fun (a, b) -> for_loop (fun () -> ignore (a +. b)) n),
