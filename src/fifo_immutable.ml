@@ -19,6 +19,7 @@ module Fifo = struct
             | (i, []) -> match List.rev i with
                 | (x :: _) -> Some x
                 | [] -> None
+
     let flush (xs : 'a t) : 'a t =
         {input = []; output = List.rev xs.input |> List.append xs.output}
 end

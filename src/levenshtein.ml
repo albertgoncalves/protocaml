@@ -1,30 +1,30 @@
 let rec distance
         (memo : ((char list * char list), int) Hashtbl.t)
-        (a : char list)
-        (b : char list) : int =
-    match Hashtbl.find_opt memo (a, b) with
+        (ls : char list)
+        (rs : char list) : int =
+    match Hashtbl.find_opt memo (ls, rs) with
         | Some x -> x
         | None ->
-            let n : int = List.length a in
-            let m : int = List.length b in
-            match (a, b) with
+            let n : int = List.length ls in
+            let m : int = List.length rs in
+            match (ls, rs) with
                 | ([], _) ->
-                    Hashtbl.add memo (a, b) m;
+                    Hashtbl.add memo (ls, rs) m;
                     m
                 | (_, []) ->
-                    Hashtbl.add memo (a, b) n;
+                    Hashtbl.add memo (ls, rs) n;
                     n
-                | ((a :: as' as as''), (b :: bs' as bs'')) ->
-                    if a == b then (
-                        let x : int = distance memo as' bs' in
-                        Hashtbl.add memo (as'', bs'') x;
+                | ((l :: ls as ls'), (r :: rs as rs')) ->
+                    if l = r then (
+                        let x : int = distance memo ls rs in
+                        Hashtbl.add memo (ls', rs') x;
                         x
                     ) else (
-                        let i : int = distance memo as'' bs' in
-                        let j : int = distance memo as' bs'' in
-                        let k : int = distance memo as' bs' in
+                        let i : int = distance memo ls' rs in
+                        let j : int = distance memo ls rs' in
+                        let k : int = distance memo ls rs in
                         let x : int = 1 + (min i (min j k)) in
-                        Hashtbl.add memo (as'', bs'') x;
+                        Hashtbl.add memo (ls', rs') x;
                         x
                     )
 
@@ -36,17 +36,18 @@ let () : unit =
         let memo : ((char list * char list), int) Hashtbl.t =
             Hashtbl.create 64 in
         (=) (distance memo (explode a) (explode b)) in
-    let print : bool -> unit = Printf.printf "%b\n" in
-    print (test "foobar" "" 6);
-    print (test "sitting" "kitten" 3);
-    print (test "flaw" "lawn" 2);
-    print (test "saturday" "sunday" 3);
-    print (test "gumbo" "gambol" 2);
-    print (test "book" "back" 2);
-    print (test "edward" "edwin" 3);
-    print (
-        test
-            "the quick brown fox jumps over the lazy dog"
-            "pack my box with five dozen liquor jugs"
-            33
-    )
+    Array.iter
+        (Printf.printf "%B\n")
+        [|
+            test "foobar" "" 6;
+            test "sitting" "kitten" 3;
+            test "flaw" "lawn" 2;
+            test "saturday" "sunday" 3;
+            test "gumbo" "gambol" 2;
+            test "book" "back" 2;
+            test "edward" "edwin" 3;
+            test
+                "the quick brown fox jumps over the lazy dog"
+                "pack my box with five dozen liquor jugs"
+                33;
+        |]
