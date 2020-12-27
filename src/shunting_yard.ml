@@ -93,9 +93,8 @@ let transform (xs : t array) : string =
     |> Queue.of_seq
     |> get_rev_polish
     |> Queue.to_seq
-    |> Array.of_seq
-    |> Array.map show
-    |> Array.to_list
+    |> List.of_seq
+    |> List.map show
     |> String.concat " "
 
 let () : unit =
