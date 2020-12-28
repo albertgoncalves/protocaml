@@ -59,8 +59,6 @@ let () : unit =
     List.iter (fun ab -> pair_to_string ab |> Printf.printf "  %s\n") terms;
     try
         Printf.printf "\nUNIFIERS\n";
-        unify terms
-        |> sub_to_string
-        |> List.iter (Printf.printf "  %s\n")
+        unify terms |> sub_to_string |> List.iter (Printf.printf "  %s\n")
     with Failure (x) ->
         Printf.printf "%s\n" x
