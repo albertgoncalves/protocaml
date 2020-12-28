@@ -16,19 +16,19 @@ let move : t -> t list = function
     | _ -> exit 1
 
 let rec solve (m : ((int * t), int) Hashtbl.t) (n : int) (k : t) : int =
-    match n with
-        | 0 -> 1
-        | n ->
-            let k' : (int * t) = (n, k) in
-            match Hashtbl.find_opt m k' with
-                | Some v -> v
-                | None ->
-                    let v : int =
-                        move k
-                        |> List.map (n - 1 |> solve m)
-                        |> List.fold_left (+) 0 in
-                    Hashtbl.add m k' v;
-                    v
+    if n = 0 then
+        1
+    else
+        let k' : (int * t) = (n, k) in
+        match Hashtbl.find_opt m k' with
+            | Some v -> v
+            | None ->
+                let v : int =
+                    move k
+                    |> List.map (n - 1 |> solve m)
+                    |> List.fold_left (+) 0 in
+                Hashtbl.add m k' v;
+                v
 
 let () : unit =
     let m : ((int * t), int) Hashtbl.t = Hashtbl.create 9 in
