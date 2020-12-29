@@ -6,7 +6,7 @@ type precedence = {
 }
 
 type t =
-    | Num of int
+    | Num of float
     | BinOp of binary_op
     | UnFn of string
     | BinFn of string
@@ -19,7 +19,7 @@ let get_precedence : binary_op -> precedence = function
     | Pow -> { rank = 4; left = false }
 
 let show : t -> string = function
-    | Num x -> Printf.sprintf "%d" x
+    | Num x -> Printf.sprintf "%.1f" x
     | BinOp Add -> "+"
     | BinOp Sub -> "-"
     | BinOp Mul -> "*"
@@ -97,39 +97,77 @@ let transform (xs : t array) : string =
     |> List.map show
     |> String.concat " "
 
+let eval (xs : t Queue.t) : float =
+    let stack : float Stack.t = Stack.create () in
+    while Queue.peek_opt xs |> Option.is_some do
+        match Queue.take xs with
+            | Num x -> Stack.push x stack
+            | BinOp Add ->
+                let b : float = Stack.pop stack in
+                let a : float = Stack.pop stack in
+                Stack.push (a +. b) stack
+            | BinOp Sub ->
+                let b : float = Stack.pop stack in
+                let a : float = Stack.pop stack in
+                Stack.push (a -. b) stack
+            | BinOp Mul ->
+                let b : float = Stack.pop stack in
+                let a : float = Stack.pop stack in
+                Stack.push (a *. b) stack
+            | BinOp Div ->
+                let b : float = Stack.pop stack in
+                let a : float = Stack.pop stack in
+                Stack.push (a /. b) stack
+            | BinOp Pow ->
+                let b : float = Stack.pop stack in
+                let a : float = Stack.pop stack in
+                Stack.push (a ** b) stack
+            | UnFn _ | BinFn _ | LParen | RParen ->
+                (
+                    Printf.eprintf "eval\n";
+                    exit 1
+                )
+    done;
+    Stack.pop stack
+
 let () : unit =
     let xs : t array array =
         [|
             [|
-                Num 3;
+                Num 3.0;
                 BinOp Add;
-                Num 4;
+                Num 4.0;
                 BinOp Mul;
-                Num 2;
+                Num 2.0;
                 BinOp Div;
                 LParen;
-                Num 1;
+                Num 1.0;
                 BinOp Sub;
-                Num 5;
+                Num 5.0;
                 RParen;
                 BinOp Pow;
-                Num 2;
+                Num 2.0;
                 BinOp Pow;
-                Num 3;
+                Num 3.0;
             |];
             [|
                 UnFn "sin";
                 LParen;
                 BinFn "max";
                 LParen;
-                Num 2;
-                Num 3;
+                Num 2.0;
+                Num 3.0;
                 RParen;
                 BinOp Div;
-                Num 3;
+                Num 3.0;
                 BinOp Mul;
-                Num 4;
+                Num 4.0;
                 RParen;
             |];
         |] in
-    Array.iter (fun x -> transform x |> (Printf.printf "%s\n")) xs
+    Array.iter (fun x -> transform x |> (Printf.printf "%s\n")) xs;
+    Array.to_seq [|Num 6.0; Num 3.0; BinOp Div|]
+    |> Queue.of_seq
+    |> get_rev_polish
+    |> eval
+    |> Printf.printf "%.1f\n"
