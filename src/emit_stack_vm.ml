@@ -256,7 +256,6 @@ let test_5 () : unit =
             "push 1";
             "store 1";
         ] in
-    print_instrs result;
     assert ((get_instrs result) = expected)
 
 let () : unit =
