@@ -139,12 +139,6 @@ let test_3 () : unit =
     let const_strs : (string, int) Hashtbl.t = Hashtbl.create 1 in
     Hashtbl.add const_strs "Hello, world!" 101; (* NOTE: Arbitrary index! *)
     let result : block = new_block (Hashtbl.create 1) const_strs in
-    [
-        Alloca "x";
-        Assign ("x", LitString "Hello, world!");
-        Call1 ("print_str_ptr", Var "x");
-    ]
-    |> List.iter (push_ast result);
     (* NOTE:
         ```
         {
@@ -153,13 +147,19 @@ let test_3 () : unit =
             print(x);
         }
         ``` *)
+    [
+        Alloca "x";
+        Assign ("x", LitString "Hello, world!");
+        Call1 ("print_str", Var "x");
+    ]
+    |> List.iter (push_ast result);
     let expected : string list =
         [
             "push _";
             "push 101"; (* NOTE: Index into `const_strs` array! *)
             "store 0";
             "load 0";
-            "call print_str_ptr";
+            "call print_str";
         ] in
     assert ((get_instrs result) = expected)
 
