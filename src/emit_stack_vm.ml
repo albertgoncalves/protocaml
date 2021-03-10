@@ -1,12 +1,14 @@
 type bin_op =
     | AddInt
     | MulInt
+    | CmpEq
 
 type ast =
     | Alloca of string
     | Assign of (string * ast)
     | BinOp of (bin_op * ast * ast)
     | Call1 of (string * ast)
+    | IfElse of (ast * ast list * ast list)
     | LitInt of int
     | LitString of string
     | Loop of ast list
@@ -44,6 +46,7 @@ let register_const_str (b : block) (s : string) : int =
 let push_bin_op (b : block) : bin_op -> unit = function
     | AddInt -> Queue.push "addi" b.instrs
     | MulInt -> Queue.push "muli" b.instrs
+    | CmpEq -> Queue.push "cmpeq" b.instrs
 
 let rec push_ast (b : block) : ast -> unit = function
     | Alloca s ->
@@ -61,6 +64,18 @@ let rec push_ast (b : block) : ast -> unit = function
         push_ast b l;
         push_ast b r;
         push_bin_op b op;
+    | IfElse (x, l, r) ->
+        push_ast b x;
+        let child_l : block = new_block (Hashtbl.copy b.locals) b.const_strs in
+        let child_r : block = new_block (Hashtbl.copy b.locals) b.const_strs in
+        List.iter (push_ast child_l) l;
+        List.iter (push_ast child_r) r;
+        let n_r : int = Queue.length child_r.instrs in
+        Queue.push (Printf.sprintf "jump %d" (n_r + 1)) child_l.instrs;
+        let n_l : int = Queue.length child_l.instrs in
+        Queue.push (Printf.sprintf "jpz %d" (n_l + 1)) b.instrs;
+        Queue.transfer child_l.instrs b.instrs;
+        Queue.transfer child_r.instrs b.instrs;
     | LitInt i -> Queue.push (Printf.sprintf "push %d" i) b.instrs
     | LitString s ->
         Queue.push
@@ -199,10 +214,56 @@ let test_4 () : unit =
         ] in
     assert ((get_instrs result) = expected)
 
+let test_5 () : unit =
+    let result : block = new_block (Hashtbl.create 1) (Hashtbl.create 0) in
+    (* NOTE:
+        ```
+        {
+            i64 x;
+            i64 y;
+            x = 1;
+            if x == 2 {
+                y = 0
+            } else {
+                y = 1
+            }
+        }
+        ``` *)
+    [
+        Alloca "x";
+        Alloca "y";
+        Assign ("x", LitInt 1);
+        IfElse (
+            BinOp (CmpEq, Var "x", LitInt 2),
+            [Assign ("y", LitInt 0)],
+            [Assign ("y", LitInt 1)]
+        );
+    ]
+    |> List.iter (push_ast result);
+    let expected : string list =
+        [
+            "push _";
+            "push _";
+            "push 1";
+            "store 0";
+            "load 0";
+            "push 2";
+            "cmpeq";
+            "jpz 4";
+            "push 0";
+            "store 1";
+            "jump 3";
+            "push 1";
+            "store 1";
+        ] in
+    print_instrs result;
+    assert ((get_instrs result) = expected)
+
 let () : unit =
     List.iter (fun f -> f ()) [
         test_1;
         test_2;
         test_3;
         test_4;
+        test_5;
     ]
