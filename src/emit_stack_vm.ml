@@ -18,10 +18,12 @@ type block =
         const_strs : (string, int) Hashtbl.t;
     }
 
-let new_block (const_strs : (string, int) Hashtbl.t) (n : int) : block =
+let new_block
+        (locals : (string, int) Hashtbl.t)
+        (const_strs : (string, int) Hashtbl.t) : block =
     {
         instrs = Queue.create ();
-        locals = Hashtbl.create n;
+        locals = locals;
         const_strs = const_strs;
     }
 
@@ -75,7 +77,7 @@ let print_instrs (b : block) : unit =
     get_instrs b |> List.iter print_endline
 
 let test_1 () : unit =
-    let result : block = new_block (Hashtbl.create 0) 0 in
+    let result : block = new_block (Hashtbl.create 0) (Hashtbl.create 0) in
     (* NOTE: `{ (1 + 1) * (3 + 2); }` *)
     BinOp (
         MulInt,
@@ -96,7 +98,7 @@ let test_1 () : unit =
     assert ((get_instrs result) = expected)
 
 let test_2 () : unit =
-    let result : block = new_block (Hashtbl.create 0) 2 in
+    let result : block = new_block (Hashtbl.create 2) (Hashtbl.create 0) in
     (* NOTE:
         ```
         {
@@ -136,7 +138,7 @@ let test_2 () : unit =
 let test_3 () : unit =
     let const_strs : (string, int) Hashtbl.t = Hashtbl.create 1 in
     Hashtbl.add const_strs "Hello, world!" 101; (* NOTE: Arbitrary index! *)
-    let result : block = new_block const_strs 1 in
+    let result : block = new_block (Hashtbl.create 1) const_strs in
     [
         Alloca "x";
         Assign ("x", LitString "Hello, world!");
