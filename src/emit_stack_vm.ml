@@ -9,6 +9,7 @@ type ast =
     | Call1 of (string * ast)
     | LitInt of int
     | LitString of string
+    | Loop of ast list
     | Var of string
 
 type block =
@@ -65,6 +66,12 @@ let rec push_ast (b : block) : ast -> unit = function
         Queue.push
             (register_const_str b s |> Printf.sprintf "push %d")
             b.instrs
+    | Loop xs ->
+        let child : block = new_block (Hashtbl.copy b.locals) b.const_strs in
+        List.iter (push_ast child) xs;
+        let n : int = Queue.length child.instrs in
+        Queue.transfer child.instrs b.instrs;
+        Queue.push (Printf.sprintf "jump %d" (-n)) b.instrs;
     | Var s ->
         Queue.push
             (Hashtbl.find b.locals s |> Printf.sprintf "load %d")
@@ -163,7 +170,39 @@ let test_3 () : unit =
         ] in
     assert ((get_instrs result) = expected)
 
+let test_4 () : unit =
+    let result : block = new_block (Hashtbl.create 1) (Hashtbl.create 0) in
+    (* NOTE:
+        ```
+        {
+            i64 x;
+            x = 1;
+            loop {
+                print(x)
+            }
+        }
+        ``` *)
+    [
+        Alloca "x";
+        Assign ("x", LitInt 1);
+        Loop [Call1 ("print_i64", Var "x")]
+    ]
+    |> List.iter (push_ast result);
+    let expected : string list =
+        [
+            "push _";
+            "push 1";
+            "store 0";
+            "load 0";
+            "call print_i64";
+            "jump -2";
+        ] in
+    assert ((get_instrs result) = expected)
+
 let () : unit =
-    test_1 ();
-    test_2 ();
-    test_3 ();
+    List.iter (fun f -> f ()) [
+        test_1;
+        test_2;
+        test_3;
+        test_4;
+    ]
