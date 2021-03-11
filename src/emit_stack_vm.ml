@@ -98,7 +98,7 @@ type ast =
     | Assign of (string * ast)
     | BinOp of (bin_op * ast * ast)
     | Break
-    | Call1 of (string * ast)
+    | Call of (string * ast list)
     | Continue
     | If of (ast * ast list)
     | IfElse of (ast * ast list * ast list)
@@ -160,9 +160,9 @@ let rec push_ast (b : block) : ast -> unit = function
                 b.instrs
         )
     | Break -> Queue'.push "BREAK" b.instrs
-    | Call1 (s, x) ->
+    | Call (s, xs) ->
         (
-            push_ast b x;
+            List.iter (push_ast b) xs;
             Queue'.push (Printf.sprintf "call %s" s) b.instrs
         )
     | Continue -> Queue'.push "CONTINUE" b.instrs
@@ -304,7 +304,7 @@ let test_3 () : unit =
     [
         Alloca "x";
         Assign ("x", LitString "Hello, world!");
-        Call1 ("print_str", Var "x");
+        Call ("print_str", [Var "x"]);
     ]
     |> List.iter (push_ast result);
     let expected : string list =
@@ -332,7 +332,7 @@ let test_4 () : unit =
     [
         Alloca "x";
         Assign ("x", LitInt 1);
-        Loop [Call1 ("print_i64", Var "x")]
+        Loop [Call ("print_i64", [Var "x"])]
     ]
     |> List.iter (push_ast result);
     let expected : string list =
@@ -420,7 +420,7 @@ let test_6 () : unit =
             If (
                 BinOp (CmpEq, Var "i", LitInt 5),
                 [
-                    Call1 ("print_i64", Var "i");
+                    Call ("print_i64", [Var "i"]);
                     Break;
                 ]
             );
@@ -434,7 +434,7 @@ let test_6 () : unit =
                     Continue;
                 ]
             );
-            Call1 ("print_i64", Var"i");
+            Call ("print_i64", [Var "i"]);
         ];
     ]
     |> List.iter (push_ast result);
