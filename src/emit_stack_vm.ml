@@ -9,7 +9,9 @@ type ast =
     | Alloca of string
     | Assign of (string * ast)
     | BinOp of (bin_op * ast * ast)
+    | Break
     | Call1 of (string * ast)
+    | If of (ast * ast list)
     | IfElse of (ast * ast list * ast list)
     | LitInt of int
     | LitString of string
@@ -68,6 +70,7 @@ let rec push_ast (b : block) : ast -> unit = function
                 (StrMap.find s b.locals |> Printf.sprintf "store %d")
                 b.instrs
         )
+    | Break -> Queue.push "BREAK" b.instrs
     | Call1 (s, x) ->
         (
             push_ast b x;
@@ -78,6 +81,16 @@ let rec push_ast (b : block) : ast -> unit = function
             push_ast b l;
             push_ast b r;
             push_bin_op b op
+        )
+    | If (x, l) ->
+        (
+            push_ast b x;
+            let child : block = new_block b.locals b.consts in
+            List.iter (push_ast child) l;
+            Queue.push
+                ((Queue.length child.instrs) + 1 |> Printf.sprintf "jpz %d")
+                b.instrs;
+            Queue.transfer child.instrs b.instrs
         )
     | IfElse (x, l, r) ->
         (
@@ -102,7 +115,15 @@ let rec push_ast (b : block) : ast -> unit = function
             let child : block = new_block b.locals b.consts in
             List.iter (push_ast child) xs;
             let n : int = Queue.length child.instrs in
-            Queue.transfer child.instrs b.instrs;
+            let f (i : int) : string -> unit = function
+                | "BREAK" ->
+                    Queue.push
+                        (Printf.sprintf "jump %d" ((n - i) + 1))
+                        b.instrs
+                | x -> Queue.push x b.instrs in
+            Queue.to_seq child.instrs
+            |> List.of_seq
+            |> List.iteri f;
             Queue.push (Printf.sprintf "jump %d" (-n)) b.instrs
         )
     | Var s ->
@@ -277,6 +298,58 @@ let test_5 () : unit =
         ] in
     assert ((get_instrs result) = expected)
 
+let test_6 () : unit =
+    let result : block = new_block StrMap.empty (Hashtbl.create 0) in
+    (* NOTE:
+        ```
+        {
+            i64 i;
+            i = 0;
+            loop {
+                if i == 5 {
+                    print(i);
+                    break;
+                }
+                i = i + 1;
+                print(i);
+            }
+        }
+        ``` *)
+    [
+        Alloca "i";
+        Assign ("i", LitInt 0);
+        Loop [
+            If (
+                BinOp (CmpEq, Var "i", LitInt 5),
+                [
+                    Call1 ("print_i64", Var "i");
+                    Break;
+                ]
+            );
+            Assign ("i", BinOp (AddInt, Var "i", LitInt 1));
+        ];
+    ]
+    |> List.iter (push_ast result);
+    let expected : string list =
+        [
+            "push _";
+            "push 0";
+            "store 0";
+            "load 0";
+            "push 5";
+            "cmpeq";
+            "jpz 4";
+            "load 0";
+            "call print_i64";
+            "jump 6";
+            "load 0";
+            "push 1";
+            "addi";
+            "store 0";
+            "jump -11";
+        ] in
+    assert ((get_instrs result) = expected)
+
 let () : unit =
     List.iter (fun f -> f ()) [
         test_1;
@@ -284,4 +357,5 @@ let () : unit =
         test_3;
         test_4;
         test_5;
+        test_6;
     ]
