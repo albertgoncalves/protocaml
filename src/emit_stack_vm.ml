@@ -11,6 +11,7 @@ type ast =
     | BinOp of (bin_op * ast * ast)
     | Break
     | Call1 of (string * ast)
+    | Continue
     | If of (ast * ast list)
     | IfElse of (ast * ast list * ast list)
     | LitInt of int
@@ -76,6 +77,7 @@ let rec push_ast (b : block) : ast -> unit = function
             push_ast b x;
             Queue.push (Printf.sprintf "call %s" s) b.instrs
         )
+    | Continue -> Queue.push "CONTINUE" b.instrs
     | BinOp (op, l, r) ->
         (
             push_ast b l;
@@ -119,6 +121,10 @@ let rec push_ast (b : block) : ast -> unit = function
                 | "BREAK" ->
                     Queue.push
                         (Printf.sprintf "jump %d" ((n - i) + 1))
+                        b.instrs
+                | "CONTINUE" ->
+                    Queue.push
+                        (Printf.sprintf "jump %d" (-i))
                         b.instrs
                 | x -> Queue.push x b.instrs in
             Queue.to_seq child.instrs
@@ -311,6 +317,12 @@ let test_6 () : unit =
                     break;
                 }
                 i = i + 1;
+                if 3 == i {
+                    loop {
+                        break;
+                    }
+                    continue;
+                }
                 print(i);
             }
         }
@@ -327,6 +339,16 @@ let test_6 () : unit =
                 ]
             );
             Assign ("i", BinOp (AddInt, Var "i", LitInt 1));
+            If (
+                BinOp (CmpEq, LitInt 3, Var "i"),
+                [
+                    Loop [
+                        Break;
+                    ];
+                    Continue;
+                ]
+            );
+            Call1 ("print_i64", Var"i");
         ];
     ]
     |> List.iter (push_ast result);
@@ -341,12 +363,21 @@ let test_6 () : unit =
             "jpz 4";
             "load 0";
             "call print_i64";
-            "jump 6";
+            "jump 15";
             "load 0";
             "push 1";
             "addi";
             "store 0";
-            "jump -11";
+            "push 3";
+            "load 0";
+            "cmpeq";
+            "jpz 4";
+            "jump 2";
+            "jump -1";
+            "jump -17";
+            "load 0";
+            "call print_i64";
+            "jump -20";
         ] in
     assert ((get_instrs result) = expected)
 
