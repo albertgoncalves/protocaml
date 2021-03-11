@@ -1,3 +1,5 @@
+module StrMap = Map.Make (String)
+
 type bin_op =
     | AddInt
     | MulInt
@@ -14,34 +16,39 @@ type ast =
     | Loop of ast list
     | Var of string
 
+type const =
+    | String of string
+
 type block =
     {
         instrs : string Queue.t;
-        locals : (string, int) Hashtbl.t;
-        const_strs : (string, int) Hashtbl.t;
+        mutable locals : int StrMap.t;
+        consts : (const, int) Hashtbl.t;
     }
 
 let new_block
-        (locals : (string, int) Hashtbl.t)
-        (const_strs : (string, int) Hashtbl.t) : block =
+        (locals : int StrMap.t)
+        (consts : (const, int) Hashtbl.t) : block =
     {
         instrs = Queue.create ();
         locals = locals;
-        const_strs = const_strs;
+        consts = consts;
     }
 
-let register_var (b : block) (s : string) : unit =
-    assert (Hashtbl.find_opt b.locals s |> Option.is_none);
-    let i : int = Hashtbl.length b.locals in
-    Hashtbl.add b.locals s i
+let register_var (b : block) (s : string) : int StrMap.t =
+    assert (StrMap.find_opt s b.locals |> Option.is_none);
+    let i : int = StrMap.cardinal b.locals in
+    StrMap.add s i b.locals
 
-let register_const_str (b : block) (s : string) : int =
-    match Hashtbl.find_opt b.const_strs s with
+let register_const (b : block) (c : const) : int =
+    match Hashtbl.find_opt b.consts c with
         | Some i -> i
         | None ->
-            let i : int = Hashtbl.length b.const_strs in
-            Hashtbl.add b.const_strs s i;
-            i
+            (
+                let i : int = Hashtbl.length b.consts in
+                Hashtbl.add b.consts c i;
+                i
+            )
 
 let push_bin_op (b : block) : bin_op -> unit = function
     | AddInt -> Queue.push "addi" b.instrs
@@ -50,46 +57,57 @@ let push_bin_op (b : block) : bin_op -> unit = function
 
 let rec push_ast (b : block) : ast -> unit = function
     | Alloca s ->
-        register_var b s;
-        Queue.push (Printf.sprintf "push _") b.instrs
+        (
+            b.locals <- register_var b s;
+            Queue.push (Printf.sprintf "push _") b.instrs
+        )
     | Assign (s, x) ->
-        push_ast b x;
-        Queue.push
-            (Hashtbl.find b.locals s |> Printf.sprintf "store %d")
-            b.instrs;
+        (
+            push_ast b x;
+            Queue.push
+                (StrMap.find s b.locals |> Printf.sprintf "store %d")
+                b.instrs
+        )
     | Call1 (s, x) ->
-        push_ast b x;
-        Queue.push (Printf.sprintf "call %s" s) b.instrs;
+        (
+            push_ast b x;
+            Queue.push (Printf.sprintf "call %s" s) b.instrs
+        )
     | BinOp (op, l, r) ->
-        push_ast b l;
-        push_ast b r;
-        push_bin_op b op;
+        (
+            push_ast b l;
+            push_ast b r;
+            push_bin_op b op
+        )
     | IfElse (x, l, r) ->
-        push_ast b x;
-        let child_l : block = new_block (Hashtbl.copy b.locals) b.const_strs in
-        let child_r : block = new_block (Hashtbl.copy b.locals) b.const_strs in
-        List.iter (push_ast child_l) l;
-        List.iter (push_ast child_r) r;
-        let n_r : int = Queue.length child_r.instrs in
-        Queue.push (Printf.sprintf "jump %d" (n_r + 1)) child_l.instrs;
-        let n_l : int = Queue.length child_l.instrs in
-        Queue.push (Printf.sprintf "jpz %d" (n_l + 1)) b.instrs;
-        Queue.transfer child_l.instrs b.instrs;
-        Queue.transfer child_r.instrs b.instrs;
+        (
+            push_ast b x;
+            let child_l : block = new_block b.locals b.consts in
+            let child_r : block = new_block b.locals b.consts in
+            List.iter (push_ast child_l) l;
+            List.iter (push_ast child_r) r;
+            let n_r : int = Queue.length child_r.instrs in
+            Queue.push (Printf.sprintf "jump %d" (n_r + 1)) child_l.instrs;
+            let n_l : int = Queue.length child_l.instrs in
+            Queue.push (Printf.sprintf "jpz %d" (n_l + 1)) b.instrs;
+            Queue.transfer child_l.instrs b.instrs;
+            Queue.transfer child_r.instrs b.instrs
+        )
     | LitInt i -> Queue.push (Printf.sprintf "push %d" i) b.instrs
     | LitString s ->
-        Queue.push
-            (register_const_str b s |> Printf.sprintf "push %d")
-            b.instrs
+        let i : int = register_const b (String s) in
+        Queue.push (Printf.sprintf "push %d" i) b.instrs
     | Loop xs ->
-        let child : block = new_block (Hashtbl.copy b.locals) b.const_strs in
-        List.iter (push_ast child) xs;
-        let n : int = Queue.length child.instrs in
-        Queue.transfer child.instrs b.instrs;
-        Queue.push (Printf.sprintf "jump %d" (-n)) b.instrs;
+        (
+            let child : block = new_block b.locals b.consts in
+            List.iter (push_ast child) xs;
+            let n : int = Queue.length child.instrs in
+            Queue.transfer child.instrs b.instrs;
+            Queue.push (Printf.sprintf "jump %d" (-n)) b.instrs
+        )
     | Var s ->
         Queue.push
-            (Hashtbl.find b.locals s |> Printf.sprintf "load %d")
+            (StrMap.find s b.locals |> Printf.sprintf "load %d")
             b.instrs
 
 let get_instrs (b : block) : string list =
@@ -99,7 +117,7 @@ let print_instrs (b : block) : unit =
     get_instrs b |> List.iter print_endline
 
 let test_1 () : unit =
-    let result : block = new_block (Hashtbl.create 0) (Hashtbl.create 0) in
+    let result : block = new_block StrMap.empty (Hashtbl.create 0) in
     (* NOTE: `{ (1 + 1) * (3 + 2); }` *)
     BinOp (
         MulInt,
@@ -120,7 +138,7 @@ let test_1 () : unit =
     assert ((get_instrs result) = expected)
 
 let test_2 () : unit =
-    let result : block = new_block (Hashtbl.create 2) (Hashtbl.create 0) in
+    let result : block = new_block StrMap.empty (Hashtbl.create 0) in
     (* NOTE:
         ```
         {
@@ -158,9 +176,10 @@ let test_2 () : unit =
     assert ((get_instrs result) = expected)
 
 let test_3 () : unit =
-    let const_strs : (string, int) Hashtbl.t = Hashtbl.create 1 in
-    Hashtbl.add const_strs "Hello, world!" 101; (* NOTE: Arbitrary index! *)
-    let result : block = new_block (Hashtbl.create 1) const_strs in
+    let consts : (const, int) Hashtbl.t = Hashtbl.create 1 in
+    (* NOTE: Arbitrary index! *)
+    Hashtbl.add consts (String "Hello, world!") 101;
+    let result : block = new_block StrMap.empty consts in
     (* NOTE:
         ```
         {
@@ -178,7 +197,7 @@ let test_3 () : unit =
     let expected : string list =
         [
             "push _";
-            "push 101"; (* NOTE: Index into `const_strs` array! *)
+            "push 101"; (* NOTE: Index into `consts` array! *)
             "store 0";
             "load 0";
             "call print_str";
@@ -186,7 +205,7 @@ let test_3 () : unit =
     assert ((get_instrs result) = expected)
 
 let test_4 () : unit =
-    let result : block = new_block (Hashtbl.create 1) (Hashtbl.create 0) in
+    let result : block = new_block StrMap.empty (Hashtbl.create 0) in
     (* NOTE:
         ```
         {
@@ -215,7 +234,7 @@ let test_4 () : unit =
     assert ((get_instrs result) = expected)
 
 let test_5 () : unit =
-    let result : block = new_block (Hashtbl.create 1) (Hashtbl.create 0) in
+    let result : block = new_block StrMap.empty (Hashtbl.create 0) in
     (* NOTE:
         ```
         {
