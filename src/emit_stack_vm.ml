@@ -1,3 +1,91 @@
+(* NOTE: See `https://github.com/ocaml/ocaml/blob/trunk/stdlib/queue.ml`. *)
+module Queue' = struct
+    type 'a cell =
+        | Nil
+        | Cons of
+              {
+                  content : 'a;
+                  mutable next : 'a cell
+              }
+
+    type 'a t =
+        {
+            mutable length : int;
+            mutable first : 'a cell;
+            mutable last : 'a cell
+        }
+
+    let create () : 'a t =
+        {
+            length = 0;
+            first = Nil;
+            last = Nil;
+        }
+
+    let clear (q : 'a t) : unit =
+        q.length <- 0;
+        q.first <- Nil;
+        q.last <- Nil
+
+    let push (x : 'a) (q : 'a t) : unit =
+        let cell : 'a cell = Cons {
+            content = x;
+            next = Nil
+        } in
+        match q.last with
+            | Nil ->
+                (
+                    q.length <- 1;
+                    q.first <- cell;
+                    q.last <- cell
+                )
+            | Cons last ->
+                (
+                    q.length <- q.length + 1;
+                    last.next <- cell;
+                    q.last <- cell
+                )
+
+    let iteri : (int -> 'a -> unit) -> 'a t -> unit =
+        let rec iteri
+                (f : int -> 'a -> unit)
+                (i : int)
+                (cell : 'a cell) : unit =
+            match cell with
+                | Nil -> ()
+                | Cons { content; next } ->
+                    (
+                        f i content;
+                        iteri f (i + 1) next
+                    ) in
+        fun f q -> iteri f 0 q.first
+
+    let transfer (q1 : 'a t) (q2 : 'a t) : unit =
+        if 0 < q1.length then
+            match q2.last with
+                | Nil ->
+                    (
+                        q2.length <- q1.length;
+                        q2.first <- q1.first;
+                        q2.last <- q1.last;
+                        clear q1
+                    )
+                | Cons last ->
+                    (
+                        q2.length <- q2.length + q1.length;
+                        last.next <- q1.first;
+                        q2.last <- q1.last;
+                        clear q1
+                    )
+
+    let to_seq (q : 'a t) : 'a Seq.t =
+        let rec f (c : 'a cell) () : 'a Seq.node =
+            match c with
+                | Nil -> Seq.Nil
+                | Cons { content = x; next } -> Seq.Cons (x, f next) in
+        f q.first
+end
+
 module StrMap = Map.Make (String)
 
 type bin_op =
@@ -24,7 +112,7 @@ type const =
 
 type block =
     {
-        instrs : string Queue.t;
+        instrs : string Queue'.t;
         mutable locals : int StrMap.t;
         consts : (const, int) Hashtbl.t;
     }
@@ -33,7 +121,7 @@ let new_block
         (locals : int StrMap.t)
         (consts : (const, int) Hashtbl.t) : block =
     {
-        instrs = Queue.create ();
+        instrs = Queue'.create ();
         locals = locals;
         consts = consts;
     }
@@ -54,30 +142,30 @@ let register_const (b : block) (c : const) : int =
             )
 
 let push_bin_op (b : block) : bin_op -> unit = function
-    | AddInt -> Queue.push "addi" b.instrs
-    | MulInt -> Queue.push "muli" b.instrs
-    | CmpEq -> Queue.push "cmpeq" b.instrs
+    | AddInt -> Queue'.push "addi" b.instrs
+    | MulInt -> Queue'.push "muli" b.instrs
+    | CmpEq -> Queue'.push "cmpeq" b.instrs
 
 let rec push_ast (b : block) : ast -> unit = function
     | Alloca s ->
         (
             b.locals <- register_var b s;
-            Queue.push (Printf.sprintf "push _") b.instrs
+            Queue'.push (Printf.sprintf "push _") b.instrs
         )
     | Assign (s, x) ->
         (
             push_ast b x;
-            Queue.push
+            Queue'.push
                 (StrMap.find s b.locals |> Printf.sprintf "store %d")
                 b.instrs
         )
-    | Break -> Queue.push "BREAK" b.instrs
+    | Break -> Queue'.push "BREAK" b.instrs
     | Call1 (s, x) ->
         (
             push_ast b x;
-            Queue.push (Printf.sprintf "call %s" s) b.instrs
+            Queue'.push (Printf.sprintf "call %s" s) b.instrs
         )
-    | Continue -> Queue.push "CONTINUE" b.instrs
+    | Continue -> Queue'.push "CONTINUE" b.instrs
     | BinOp (op, l, r) ->
         (
             push_ast b l;
@@ -89,10 +177,10 @@ let rec push_ast (b : block) : ast -> unit = function
             push_ast b x;
             let child : block = new_block b.locals b.consts in
             List.iter (push_ast child) l;
-            Queue.push
-                ((Queue.length child.instrs) + 1 |> Printf.sprintf "jpz %d")
+            Queue'.push
+                (child.instrs.Queue'.length + 1 |> Printf.sprintf "jpz %d")
                 b.instrs;
-            Queue.transfer child.instrs b.instrs
+            Queue'.transfer child.instrs b.instrs
         )
     | IfElse (x, l, r) ->
         (
@@ -101,44 +189,42 @@ let rec push_ast (b : block) : ast -> unit = function
             let child_r : block = new_block b.locals b.consts in
             List.iter (push_ast child_l) l;
             List.iter (push_ast child_r) r;
-            let n_r : int = Queue.length child_r.instrs in
-            Queue.push (Printf.sprintf "jump %d" (n_r + 1)) child_l.instrs;
-            let n_l : int = Queue.length child_l.instrs in
-            Queue.push (Printf.sprintf "jpz %d" (n_l + 1)) b.instrs;
-            Queue.transfer child_l.instrs b.instrs;
-            Queue.transfer child_r.instrs b.instrs
+            let n_r : int =  child_r.instrs.Queue'.length in
+            Queue'.push (Printf.sprintf "jump %d" (n_r + 1)) child_l.instrs;
+            let n_l : int = child_l.instrs.Queue'.length in
+            Queue'.push (Printf.sprintf "jpz %d" (n_l + 1)) b.instrs;
+            Queue'.transfer child_l.instrs b.instrs;
+            Queue'.transfer child_r.instrs b.instrs
         )
-    | LitInt i -> Queue.push (Printf.sprintf "push %d" i) b.instrs
+    | LitInt i -> Queue'.push (Printf.sprintf "push %d" i) b.instrs
     | LitString s ->
         let i : int = register_const b (String s) in
-        Queue.push (Printf.sprintf "push %d" i) b.instrs
+        Queue'.push (Printf.sprintf "push %d" i) b.instrs
     | Loop xs ->
         (
             let child : block = new_block b.locals b.consts in
             List.iter (push_ast child) xs;
-            let n : int = Queue.length child.instrs in
+            let n : int =  child.instrs.Queue'.length in
             let f (i : int) : string -> unit = function
                 | "BREAK" ->
-                    Queue.push
+                    Queue'.push
                         (Printf.sprintf "jump %d" ((n - i) + 1))
                         b.instrs
                 | "CONTINUE" ->
-                    Queue.push
+                    Queue'.push
                         (Printf.sprintf "jump %d" (-i))
                         b.instrs
-                | x -> Queue.push x b.instrs in
-            Queue.to_seq child.instrs
-            |> List.of_seq
-            |> List.iteri f;
-            Queue.push (Printf.sprintf "jump %d" (-n)) b.instrs
+                | x -> Queue'.push x b.instrs in
+            Queue'.iteri f child.instrs;
+            Queue'.push (Printf.sprintf "jump %d" (-n)) b.instrs
         )
     | Var s ->
-        Queue.push
+        Queue'.push
             (StrMap.find s b.locals |> Printf.sprintf "load %d")
             b.instrs
 
 let get_instrs (b : block) : string list =
-    b.instrs |> Queue.to_seq |> List.of_seq
+    b.instrs |> Queue'.to_seq |> List.of_seq
 
 let print_instrs (b : block) : unit =
     get_instrs b |> List.iter print_endline
