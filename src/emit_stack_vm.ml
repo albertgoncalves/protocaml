@@ -190,13 +190,21 @@ let rec push_ast (b : block) : ast -> unit = function
     | Call (s, xs) ->
         (
             List.iter (push_ast b) xs;
-            match Hashtbl.find_opt b.fns s with
-                | None -> Queue'.push (Printf.sprintf "call %s" s) b.instrs
-                | Some i -> Queue'.push (Printf.sprintf "call %d" i) b.instrs
+            Queue'.push
+                (
+                    (* NOTE: A `string` is not a valid argument; eventually
+                       this will need to be revised. *)
+                    match Hashtbl.find_opt b.fns s with
+                        | None -> Printf.sprintf "call %s" s
+                        | Some i -> Printf.sprintf "call %d" i
+                )
+                b.instrs
         )
     | Continue -> Queue'.push "CONTINUE" b.instrs
     | Fn (s, args, rets, xs) ->
         (
+            (* NOTE: This is not the best way to map `function` labels to their
+               respective instruction indices. *)
             register_fn b s;
             let child : block = new_block StrMap.empty b.consts b.fns in
             let rec f : arg list -> unit = function
@@ -206,15 +214,13 @@ let rec push_ast (b : block) : ast -> unit = function
                         child.locals <- register_var child s;
                         f xs
                     ) in
+            (* NOTE: We need to save some data to the stack to be able to
+               return from the function routine; basically need to carve out
+               space for two additional `local` values. *)
             f ((".ip", U64) :: (".bp", U64) :: args);
+            Queue'.push "save" child.instrs;
             let n_args : int = List.length args in
-            let n_rets : int = List.length rets in
-            List.iter
-                (fun x -> Queue'.push x child.instrs)
-                [
-                    "save";
-                    (n_args + 2 |> Printf.sprintf "frame %d");
-                ];
+            Queue'.push (n_args + 2 |> Printf.sprintf "frame %d") child.instrs;
             if n_args <> 0 then (
                 let rot : string = n_args + 1 |> Printf.sprintf "rot %d" in
                 Queue'.push rot child.instrs;
@@ -235,12 +241,8 @@ let rec push_ast (b : block) : ast -> unit = function
                                 (n_locals - 2 |> Printf.sprintf "drop %d")
                                 b.instrs;
                         );
-                        List.iter
-                            (fun x -> Queue'.push x b.instrs)
-                            [
-                                "restore";
-                                "ret";
-                            ]
+                        Queue'.push "restore" b.instrs;
+                        Queue'.push "ret" b.instrs
                     )
                 | x -> Queue'.push x b.instrs in
             Queue'.iter f child.instrs;
