@@ -127,8 +127,8 @@ type ast =
     | Call of (string * ast list)
     | Continue
     | Fn of (string * arg list * typ list * ast list)
-    | IfElse of (ast * ast list * ast list)
     | If of (ast * ast list)
+    | IfElse of (ast * ast list * ast list)
     | LitInt of int
     | LitString of string
     | Loop of ast list
