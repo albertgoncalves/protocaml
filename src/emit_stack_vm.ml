@@ -109,16 +109,18 @@ module StrMap = Map.Make (String)
 type typ =
     | I64
     | U64
+    | Char
+    | Ptr of typ
 
 type arg = (string * typ)
 
 type bin_op =
-    | AddInt
-    | MulInt
+    | AddI64
+    | MulI64
     | CmpEq
 
 type ast =
-    | Alloca of string
+    | Alloca of (string * typ)
     | Assign of (string * ast)
     | BinOp of (bin_op * ast * ast)
     | Break
@@ -184,12 +186,12 @@ let register_fn (b : block) (s : string) : unit =
     Hashtbl.add b.fns s i
 
 let push_bin_op (b : block) : bin_op -> unit = function
-    | AddInt -> Queue'.push "addi" b.instrs
-    | MulInt -> Queue'.push "muli" b.instrs
+    | AddI64 -> Queue'.push "addi" b.instrs
+    | MulI64 -> Queue'.push "muli" b.instrs
     | CmpEq -> Queue'.push "cmpeq" b.instrs
 
 let rec push_ast (b : block) : ast -> unit = function
-    | Alloca s ->
+    | Alloca (s, _) ->
         (
             b.locals <- register_var b s;
             Queue'.push (Printf.sprintf "push _") b.instrs
@@ -341,9 +343,9 @@ let test_1 () : unit =
         new_block StrMap.empty (Hashtbl.create 0) (Hashtbl.create 0) in
     (* NOTE: `{ (1 + 1) * (3 + 2); }` *)
     BinOp (
-        MulInt,
-        BinOp (AddInt, LitInt 1, LitInt 2),
-        BinOp (AddInt, LitInt 3, LitInt 4)
+        MulI64,
+        BinOp (AddI64, LitInt 1, LitInt 2),
+        BinOp (AddI64, LitInt 3, LitInt 4)
     )
     |> push_ast result;
     let expected : string list =
@@ -372,11 +374,11 @@ let test_2 () : unit =
         }
         ``` *)
     [
-        Alloca "x";
-        Alloca "y";
+        Alloca ("x", I64);
+        Alloca ("y", I64);
         Assign ("y", LitInt 3);
-        Assign ("x", BinOp (AddInt, LitInt 1, LitInt 2));
-        BinOp (MulInt, LitInt 4, BinOp (AddInt, Var "x", Var "y"));
+        Assign ("x", BinOp (AddI64, LitInt 1, LitInt 2));
+        BinOp (MulI64, LitInt 4, BinOp (AddI64, Var "x", Var "y"));
     ]
     |> List.iter (push_ast result);
     let expected : string list =
@@ -411,7 +413,7 @@ let test_3 () : unit =
         }
         ``` *)
     [
-        Alloca "x";
+        Alloca ("x", Ptr Char);
         Assign ("x", LitString "Hello, world!");
         Call ("print_str", [Var "x"]);
     ]
@@ -440,7 +442,7 @@ let test_4 () : unit =
         }
         ``` *)
     [
-        Alloca "x";
+        Alloca ("x", I64);
         Assign ("x", LitInt 1);
         Loop [Call ("print_i64", [Var "x"])]
     ]
@@ -473,8 +475,8 @@ let test_5 () : unit =
         }
         ``` *)
     [
-        Alloca "x";
-        Alloca "y";
+        Alloca ("x", I64);
+        Alloca ("y", I64);
         Assign ("x", LitInt 1);
         IfElse (
             BinOp (CmpEq, Var "x", LitInt 2),
@@ -526,7 +528,7 @@ let test_6 () : unit =
         }
         ``` *)
     [
-        Alloca "i";
+        Alloca ("i", I64);
         Assign ("i", LitInt 0);
         Loop [
             If (
@@ -536,7 +538,7 @@ let test_6 () : unit =
                     Break;
                 ]
             );
-            Assign ("i", BinOp (AddInt, Var "i", LitInt 1));
+            Assign ("i", BinOp (AddI64, Var "i", LitInt 1));
             If (
                 BinOp (CmpEq, LitInt 3, Var "i"),
                 [
@@ -600,8 +602,8 @@ let test_7 () : unit =
             [("x", I64); ("y", I64)],
             [I64],
             [
-                Alloca "z";
-                Assign ("z", BinOp (AddInt, Var "x", Var "y"));
+                Alloca ("z", I64);
+                Assign ("z", BinOp (AddI64, Var "x", Var "y"));
                 Return [Var "z"];
             ]
         );
@@ -667,10 +669,10 @@ let test_8 () : unit =
             [("x", I64); ("y", I64); ("z", I64)],
             [I64; I64],
             [
-                Alloca "w";
+                Alloca ("w", I64);
                 Assign (
                     "w",
-                    BinOp (AddInt, BinOp (AddInt, Var "x", Var "y"), Var "z")
+                    BinOp (AddI64, BinOp (AddI64, Var "x", Var "y"), Var "z")
                 );
                 IfElse (
                     BinOp (CmpEq, Var "x", LitInt 0),
@@ -681,13 +683,13 @@ let test_8 () : unit =
                             [
                                 Return [
                                     Var "y";
-                                    BinOp (AddInt, Var "x", Var "z");
+                                    BinOp (AddI64, Var "x", Var "z");
                                 ];
                             ]
                         );
                     ]
                 );
-                Return [BinOp (AddInt, LitInt 1, Var "x"); Var "w"];
+                Return [BinOp (AddI64, LitInt 1, Var "x"); Var "w"];
             ]
         );
     ]
