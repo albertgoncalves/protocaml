@@ -46,6 +46,17 @@ module Queue' = struct
                     q.last <- cell
                 )
 
+    let iter : ('a -> unit) -> 'a t -> unit =
+        let rec iter (f : 'a -> unit) (cell : 'a cell) : unit =
+            match cell with
+                | Nil -> ()
+                | Cons { content; next } ->
+                    (
+                        f content;
+                        iter f next
+                    ) in
+        fun f q -> iter f q.first
+
     let iteri : (int -> 'a -> unit) -> 'a t -> unit =
         let rec iteri
                 (f : int -> 'a -> unit)
@@ -88,6 +99,12 @@ end
 
 module StrMap = Map.Make (String)
 
+type typ =
+    | I64
+    | U64
+
+type arg = (string * typ)
+
 type bin_op =
     | AddInt
     | MulInt
@@ -100,11 +117,13 @@ type ast =
     | Break
     | Call of (string * ast list)
     | Continue
-    | If of (ast * ast list)
+    | Fn of (string * arg list * typ list * ast list)
     | IfElse of (ast * ast list * ast list)
+    | If of (ast * ast list)
     | LitInt of int
     | LitString of string
     | Loop of ast list
+    | Return of ast list
     | Var of string
 
 type const =
@@ -115,15 +134,18 @@ type block =
         instrs : string Queue'.t;
         mutable locals : int StrMap.t;
         consts : (const, int) Hashtbl.t;
+        fns : (string, int) Hashtbl.t;
     }
 
 let new_block
         (locals : int StrMap.t)
-        (consts : (const, int) Hashtbl.t) : block =
+        (consts : (const, int) Hashtbl.t)
+        (fns : (string, int) Hashtbl.t) : block =
     {
         instrs = Queue'.create ();
         locals = locals;
         consts = consts;
+        fns = fns;
     }
 
 let register_var (b : block) (s : string) : int StrMap.t =
@@ -140,6 +162,11 @@ let register_const (b : block) (c : const) : int =
                 Hashtbl.add b.consts c i;
                 i
             )
+
+let register_fn (b : block) (s : string) : unit =
+    assert (Hashtbl.find_opt b.fns s |> Option.is_none);
+    let i : int = Hashtbl.length b.fns in
+    Hashtbl.add b.fns s i
 
 let push_bin_op (b : block) : bin_op -> unit = function
     | AddInt -> Queue'.push "addi" b.instrs
@@ -163,9 +190,61 @@ let rec push_ast (b : block) : ast -> unit = function
     | Call (s, xs) ->
         (
             List.iter (push_ast b) xs;
-            Queue'.push (Printf.sprintf "call %s" s) b.instrs
+            match Hashtbl.find_opt b.fns s with
+                | None -> Queue'.push (Printf.sprintf "call %s" s) b.instrs
+                | Some i -> Queue'.push (Printf.sprintf "call %d" i) b.instrs
         )
     | Continue -> Queue'.push "CONTINUE" b.instrs
+    | Fn (s, args, rets, xs) ->
+        (
+            register_fn b s;
+            let child : block = new_block StrMap.empty b.consts b.fns in
+            let rec f : arg list -> unit = function
+                | [] -> ()
+                | (s, _) :: xs ->
+                    (
+                        child.locals <- register_var child s;
+                        f xs
+                    ) in
+            f ((".ip", U64) :: (".bp", U64) :: args);
+            let n_args : int = List.length args in
+            let n_rets : int = List.length rets in
+            List.iter
+                (fun x -> Queue'.push x child.instrs)
+                [
+                    "save";
+                    (n_args + 2 |> Printf.sprintf "frame %d");
+                ];
+            if n_args <> 0 then (
+                let rot : string = n_args + 1 |> Printf.sprintf "rot %d" in
+                Queue'.push rot child.instrs;
+                Queue'.push rot child.instrs
+            );
+            List.iter (push_ast child) xs;
+            let n_locals : int = StrMap.cardinal child.locals in
+            let f : string -> unit = function
+                | "RETURN" ->
+                    (
+                        for _ = 0 to (n_rets - 1) do
+                            Queue'.push
+                                (Printf.sprintf "rot %d" n_locals)
+                                b.instrs
+                        done;
+                        if 2 < n_locals then (
+                            Queue'.push
+                                (n_locals - 2 |> Printf.sprintf "drop %d")
+                                b.instrs;
+                        );
+                        List.iter
+                            (fun x -> Queue'.push x b.instrs)
+                            [
+                                "restore";
+                                "ret";
+                            ]
+                    )
+                | x -> Queue'.push x b.instrs in
+            Queue'.iter f child.instrs;
+        )
     | BinOp (op, l, r) ->
         (
             push_ast b l;
@@ -175,7 +254,7 @@ let rec push_ast (b : block) : ast -> unit = function
     | If (x, l) ->
         (
             push_ast b x;
-            let child : block = new_block b.locals b.consts in
+            let child : block = new_block b.locals b.consts b.fns in
             List.iter (push_ast child) l;
             Queue'.push
                 (child.instrs.Queue'.length + 1 |> Printf.sprintf "jpz %d")
@@ -185,8 +264,8 @@ let rec push_ast (b : block) : ast -> unit = function
     | IfElse (x, l, r) ->
         (
             push_ast b x;
-            let child_l : block = new_block b.locals b.consts in
-            let child_r : block = new_block b.locals b.consts in
+            let child_l : block = new_block b.locals b.consts b.fns in
+            let child_r : block = new_block b.locals b.consts b.fns in
             List.iter (push_ast child_l) l;
             List.iter (push_ast child_r) r;
             let n_r : int =  child_r.instrs.Queue'.length in
@@ -202,7 +281,7 @@ let rec push_ast (b : block) : ast -> unit = function
         Queue'.push (Printf.sprintf "push %d" i) b.instrs
     | Loop xs ->
         (
-            let child : block = new_block b.locals b.consts in
+            let child : block = new_block b.locals b.consts b.fns in
             List.iter (push_ast child) xs;
             let n : int =  child.instrs.Queue'.length in
             let f (i : int) : string -> unit = function
@@ -218,6 +297,11 @@ let rec push_ast (b : block) : ast -> unit = function
             Queue'.iteri f child.instrs;
             Queue'.push (Printf.sprintf "jump %d" (-n)) b.instrs
         )
+    | Return xs ->
+        (
+            List.iter (push_ast b) xs;
+            Queue'.push "RETURN" b.instrs
+        )
     | Var s ->
         Queue'.push
             (StrMap.find s b.locals |> Printf.sprintf "load %d")
@@ -230,7 +314,8 @@ let print_instrs (b : block) : unit =
     get_instrs b |> List.iter print_endline
 
 let test_1 () : unit =
-    let result : block = new_block StrMap.empty (Hashtbl.create 0) in
+    let result : block =
+        new_block StrMap.empty (Hashtbl.create 0) (Hashtbl.create 0) in
     (* NOTE: `{ (1 + 1) * (3 + 2); }` *)
     BinOp (
         MulInt,
@@ -251,7 +336,8 @@ let test_1 () : unit =
     assert ((get_instrs result) = expected)
 
 let test_2 () : unit =
-    let result : block = new_block StrMap.empty (Hashtbl.create 0) in
+    let result : block =
+        new_block StrMap.empty (Hashtbl.create 0) (Hashtbl.create 0) in
     (* NOTE:
         ```
         {
@@ -292,7 +378,7 @@ let test_3 () : unit =
     let consts : (const, int) Hashtbl.t = Hashtbl.create 1 in
     (* NOTE: Arbitrary index! *)
     Hashtbl.add consts (String "Hello, world!") 101;
-    let result : block = new_block StrMap.empty consts in
+    let result : block = new_block StrMap.empty consts (Hashtbl.create 0) in
     (* NOTE:
         ```
         {
@@ -318,7 +404,8 @@ let test_3 () : unit =
     assert ((get_instrs result) = expected)
 
 let test_4 () : unit =
-    let result : block = new_block StrMap.empty (Hashtbl.create 0) in
+    let result : block =
+        new_block StrMap.empty (Hashtbl.create 0) (Hashtbl.create 0) in
     (* NOTE:
         ```
         {
@@ -347,7 +434,8 @@ let test_4 () : unit =
     assert ((get_instrs result) = expected)
 
 let test_5 () : unit =
-    let result : block = new_block StrMap.empty (Hashtbl.create 0) in
+    let result : block =
+        new_block StrMap.empty (Hashtbl.create 0) (Hashtbl.create 0) in
     (* NOTE:
         ```
         {
@@ -391,7 +479,8 @@ let test_5 () : unit =
     assert ((get_instrs result) = expected)
 
 let test_6 () : unit =
-    let result : block = new_block StrMap.empty (Hashtbl.create 0) in
+    let result : block =
+        new_block StrMap.empty (Hashtbl.create 0) (Hashtbl.create 0) in
     (* NOTE:
         ```
         {
@@ -467,6 +556,70 @@ let test_6 () : unit =
         ] in
     assert ((get_instrs result) = expected)
 
+let test_7 () : unit =
+    let result : block =
+        new_block StrMap.empty (Hashtbl.create 0) (Hashtbl.create 0) in
+    (* NOTE:
+        ```
+        i64 f(i64 x, i64 y) {
+            i64 z;
+            z = x + y;
+            return z;
+        }
+
+        void g() {
+            print(f(4, 5));
+        }
+        ``` *)
+    [
+        Fn (
+            "f",
+            [("x", I64); ("y", I64)],
+            [I64],
+            [
+                Alloca "z";
+                Assign ("z", BinOp (AddInt, Var "x", Var "y"));
+                Return [Var "z"];
+            ]
+        );
+        Fn (
+            "g",
+            [],
+            [],
+            [
+                Call ("print_i64", [Call ("f", [LitInt 4; LitInt 5])]);
+                Return [];
+            ]
+        );
+    ]
+    |> List.iter (push_ast result);
+    let expected : string list =
+        [
+            "save";
+            "frame 4";
+            "rot 3";
+            "rot 3";
+            "push _";
+            "load 2";
+            "load 3";
+            "addi";
+            "store 4";
+            "load 4";
+            "rot 5";
+            "drop 3";
+            "restore";
+            "ret";
+            "save";
+            "frame 2";
+            "push 4";
+            "push 5";
+            "call 0";
+            "call print_i64";
+            "restore";
+            "ret";
+        ] in
+    assert ((get_instrs result) = expected)
+
 let () : unit =
     List.iter (fun f -> f ()) [
         test_1;
@@ -475,4 +628,5 @@ let () : unit =
         test_4;
         test_5;
         test_6;
+        test_7;
     ]
