@@ -89,6 +89,13 @@ module Queue' = struct
                         clear q1
                     )
 
+    let fold : ('b -> 'a -> 'b) -> 'b -> 'a t -> 'b =
+        let rec fold (f : 'b -> 'a -> 'b) (accu : 'b) : 'a cell -> 'b =
+            function
+                | Nil -> accu
+                | Cons { content; next } -> fold f (f accu content) next in
+        fun f accu q -> fold f accu q.first
+
     let to_seq (q : 'a t) : 'a Seq.t =
         let rec f (c : 'a cell) () : 'a Seq.node =
             match c with
@@ -163,6 +170,14 @@ let register_const (b : block) (c : const) : int =
                 i
             )
 
+let pad_returns (b : block) : int =
+    (* NOTE: A `RETURN` statement will *always* unpack into 5 instrs;
+       let's add 4 to all such statements we haven't yet unpacked. *)
+    let f (n : int) : string -> int = function
+        | "RETURN" -> n + 1
+        | _ -> n in
+    4 * (Queue'.fold f 0 b.instrs)
+
 let register_fn (b : block) (s : string) : unit =
     assert (Hashtbl.find_opt b.fns s |> Option.is_none);
     let i : int = Hashtbl.length b.fns in
@@ -228,12 +243,16 @@ let rec push_ast (b : block) : ast -> unit = function
             );
             List.iter (push_ast child) xs;
             let n_locals : int = StrMap.cardinal child.locals in
+            let n_rets : int = List.length rets in
             let f : string -> unit = function
                 | "RETURN" ->
                     (
                         for _ = 0 to (n_rets - 1) do
                             Queue'.push
-                                (Printf.sprintf "rot %d" n_locals)
+                                (
+                                    n_locals + (n_rets - 1)
+                                    |> Printf.sprintf "rot %d"
+                                )
                                 b.instrs
                         done;
                         if 2 < n_locals then (
@@ -258,9 +277,9 @@ let rec push_ast (b : block) : ast -> unit = function
             push_ast b x;
             let child : block = new_block b.locals b.consts b.fns in
             List.iter (push_ast child) l;
-            Queue'.push
-                (child.instrs.Queue'.length + 1 |> Printf.sprintf "jpz %d")
-                b.instrs;
+            let n : int =
+                (child.instrs.Queue'.length + 1) + (pad_returns child) in
+            Queue'.push (Printf.sprintf "jpz %d" n) b.instrs;
             Queue'.transfer child.instrs b.instrs
         )
     | IfElse (x, l, r) ->
@@ -270,10 +289,12 @@ let rec push_ast (b : block) : ast -> unit = function
             let child_r : block = new_block b.locals b.consts b.fns in
             List.iter (push_ast child_l) l;
             List.iter (push_ast child_r) r;
-            let n_r : int =  child_r.instrs.Queue'.length in
-            Queue'.push (Printf.sprintf "jump %d" (n_r + 1)) child_l.instrs;
-            let n_l : int = child_l.instrs.Queue'.length in
-            Queue'.push (Printf.sprintf "jpz %d" (n_l + 1)) b.instrs;
+            let n_r : int =
+                (child_r.instrs.Queue'.length + 1) + (pad_returns child_r) in
+            Queue'.push (Printf.sprintf "jump %d" n_r) child_l.instrs;
+            let n_l : int =
+                (child_l.instrs.Queue'.length + 1) + (pad_returns child_l) in
+            Queue'.push (Printf.sprintf "jpz %d" n_l) b.instrs;
             Queue'.transfer child_l.instrs b.instrs;
             Queue'.transfer child_r.instrs b.instrs
         )
@@ -622,6 +643,105 @@ let test_7 () : unit =
         ] in
     assert ((get_instrs result) = expected)
 
+let test_8 () : unit =
+    let result : block =
+        new_block StrMap.empty (Hashtbl.create 0) (Hashtbl.create 0) in
+    (* NOTE:
+        ```
+        (i64, i64) f(i64 x, i64 y, i64 z) {
+            i64 w;
+            w = (x + y) + z;
+            if x == 0 {
+                return (x, y);
+            } else {
+                if 0 == y {
+                    return (y, x + z);
+                }
+            }
+            return (1 + x, w);
+        }
+        ``` *)
+    [
+        Fn (
+            "f",
+            [("x", I64); ("y", I64); ("z", I64)],
+            [I64; I64],
+            [
+                Alloca "w";
+                Assign (
+                    "w",
+                    BinOp (AddInt, BinOp (AddInt, Var "x", Var "y"), Var "z")
+                );
+                IfElse (
+                    BinOp (CmpEq, Var "x", LitInt 0),
+                    [Return [Var "x"; Var "y"]],
+                    [
+                        If (
+                            BinOp (CmpEq, LitInt 0, Var "y"),
+                            [
+                                Return [
+                                    Var "y";
+                                    BinOp (AddInt, Var "x", Var "z");
+                                ];
+                            ]
+                        );
+                    ]
+                );
+                Return [BinOp (AddInt, LitInt 1, Var "x"); Var "w"];
+            ]
+        );
+    ]
+    |> List.iter (push_ast result);
+    let expected : string list =
+        [
+            "save";
+            "frame 5";
+            "rot 4";
+            "rot 4";
+            "push _";
+            "load 2";
+            "load 3";
+            "addi";
+            "load 4";
+            "addi";
+            "store 5";
+            "load 2";
+            "push 0";
+            "cmpeq";
+            "jpz 9";
+            "load 2";
+            "load 3";
+            "rot 7";
+            "rot 7";
+            "drop 4";
+            "restore";
+            "ret";
+            "jump 14";
+            "push 0";
+            "load 3";
+            "cmpeq";
+            "jpz 10";
+            "load 3";
+            "load 2";
+            "load 4";
+            "addi";
+            "rot 7";
+            "rot 7";
+            "drop 4";
+            "restore";
+            "ret";
+            "push 1";
+            "load 2";
+            "addi";
+            "load 5";
+            "rot 7";
+            "rot 7";
+            "drop 4";
+            "restore";
+            "ret";
+        ] in
+    assert ((get_instrs result) = expected)
+
 let () : unit =
     List.iter (fun f -> f ()) [
         test_1;
@@ -631,4 +751,5 @@ let () : unit =
         test_5;
         test_6;
         test_7;
+        test_8;
     ]
