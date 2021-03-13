@@ -117,7 +117,7 @@ type arg = (string * typ)
 type bin_op =
     | AddI64
     | MulI64
-    | CmpEq
+    | Eq
 
 type ast =
     | Alloca of (string * typ)
@@ -188,13 +188,13 @@ let register_fn (b : block) (s : string) : unit =
 let push_bin_op (b : block) : bin_op -> unit = function
     | AddI64 -> Queue'.push "addi" b.instrs
     | MulI64 -> Queue'.push "muli" b.instrs
-    | CmpEq -> Queue'.push "cmpeq" b.instrs
+    | Eq -> Queue'.push "eq" b.instrs
 
 let rec push_ast (b : block) : ast -> unit = function
     | Alloca (s, _) ->
         (
             b.locals <- register_var b s;
-            Queue'.push (Printf.sprintf "push _") b.instrs
+            Queue'.push (Printf.sprintf "rsrv 1") b.instrs
         )
     | Assign (s, x) ->
         (
@@ -239,9 +239,9 @@ let rec push_ast (b : block) : ast -> unit = function
             let n_args : int = List.length args in
             Queue'.push (n_args + 2 |> Printf.sprintf "frame %d") child.instrs;
             if n_args <> 0 then (
-                let rot : string = n_args + 1 |> Printf.sprintf "rot %d" in
-                Queue'.push rot child.instrs;
-                Queue'.push rot child.instrs
+                let bury : string = n_args + 1 |> Printf.sprintf "bury %d" in
+                Queue'.push bury child.instrs;
+                Queue'.push bury child.instrs
             );
             List.iter (push_ast child) xs;
             let n_locals : int = StrMap.cardinal child.locals in
@@ -253,7 +253,7 @@ let rec push_ast (b : block) : ast -> unit = function
                             Queue'.push
                                 (
                                     n_locals + (n_rets - 1)
-                                    |> Printf.sprintf "rot %d"
+                                    |> Printf.sprintf "bury %d"
                                 )
                                 b.instrs
                         done;
@@ -262,7 +262,7 @@ let rec push_ast (b : block) : ast -> unit = function
                                 (n_locals - 2 |> Printf.sprintf "drop %d")
                                 b.instrs;
                         );
-                        Queue'.push "restore" b.instrs;
+                        Queue'.push "reset" b.instrs;
                         Queue'.push "ret" b.instrs
                     )
                 | x -> Queue'.push x b.instrs in
@@ -329,7 +329,7 @@ let rec push_ast (b : block) : ast -> unit = function
         )
     | Var s ->
         Queue'.push
-            (StrMap.find s b.locals |> Printf.sprintf "load %d")
+            (StrMap.find s b.locals |> Printf.sprintf "copy %d")
             b.instrs
 
 let get_instrs (b : block) : string list =
@@ -383,8 +383,8 @@ let test_2 () : unit =
     |> List.iter (push_ast result);
     let expected : string list =
         [
-            "push _";
-            "push _";
+            "rsrv 1";
+            "rsrv 1";
             "push 3";
             "store 1";
             "push 1";
@@ -392,8 +392,8 @@ let test_2 () : unit =
             "addi";
             "store 0";
             "push 4";
-            "load 0";
-            "load 1";
+            "copy 0";
+            "copy 1";
             "addi";
             "muli";
         ] in
@@ -420,10 +420,10 @@ let test_3 () : unit =
     |> List.iter (push_ast result);
     let expected : string list =
         [
-            "push _";
+            "rsrv 1";
             "push 101"; (* NOTE: Index into `consts` array! *)
             "store 0";
-            "load 0";
+            "copy 0";
             "call print_str";
         ] in
     assert ((get_instrs result) = expected)
@@ -449,10 +449,10 @@ let test_4 () : unit =
     |> List.iter (push_ast result);
     let expected : string list =
         [
-            "push _";
+            "rsrv 1";
             "push 1";
             "store 0";
-            "load 0";
+            "copy 0";
             "call print_i64";
             "jump -2";
         ] in
@@ -479,7 +479,7 @@ let test_5 () : unit =
         Alloca ("y", I64);
         Assign ("x", LitInt 1);
         IfElse (
-            BinOp (CmpEq, Var "x", LitInt 2),
+            BinOp (Eq, Var "x", LitInt 2),
             [Assign ("y", LitInt 0)],
             [Assign ("y", LitInt 1)]
         );
@@ -487,13 +487,13 @@ let test_5 () : unit =
     |> List.iter (push_ast result);
     let expected : string list =
         [
-            "push _";
-            "push _";
+            "rsrv 1";
+            "rsrv 1";
             "push 1";
             "store 0";
-            "load 0";
+            "copy 0";
             "push 2";
-            "cmpeq";
+            "eq";
             "jpz 4";
             "push 0";
             "store 1";
@@ -532,7 +532,7 @@ let test_6 () : unit =
         Assign ("i", LitInt 0);
         Loop [
             If (
-                BinOp (CmpEq, Var "i", LitInt 5),
+                BinOp (Eq, Var "i", LitInt 5),
                 [
                     Call ("print_i64", [Var "i"]);
                     Break;
@@ -540,7 +540,7 @@ let test_6 () : unit =
             );
             Assign ("i", BinOp (AddI64, Var "i", LitInt 1));
             If (
-                BinOp (CmpEq, LitInt 3, Var "i"),
+                BinOp (Eq, LitInt 3, Var "i"),
                 [
                     Loop [
                         Break;
@@ -554,28 +554,28 @@ let test_6 () : unit =
     |> List.iter (push_ast result);
     let expected : string list =
         [
-            "push _";
+            "rsrv 1";
             "push 0";
             "store 0";
-            "load 0";
+            "copy 0";
             "push 5";
-            "cmpeq";
+            "eq";
             "jpz 4";
-            "load 0";
+            "copy 0";
             "call print_i64";
             "jump 15";
-            "load 0";
+            "copy 0";
             "push 1";
             "addi";
             "store 0";
             "push 3";
-            "load 0";
-            "cmpeq";
+            "copy 0";
+            "eq";
             "jpz 4";
             "jump 2";
             "jump -1";
             "jump -17";
-            "load 0";
+            "copy 0";
             "call print_i64";
             "jump -20";
         ] in
@@ -622,17 +622,17 @@ let test_7 () : unit =
         [
             "save";
             "frame 4";
-            "rot 3";
-            "rot 3";
-            "push _";
-            "load 2";
-            "load 3";
+            "bury 3";
+            "bury 3";
+            "rsrv 1";
+            "copy 2";
+            "copy 3";
             "addi";
             "store 4";
-            "load 4";
-            "rot 5";
+            "copy 4";
+            "bury 5";
             "drop 3";
-            "restore";
+            "reset";
             "ret";
             "save";
             "frame 2";
@@ -640,7 +640,7 @@ let test_7 () : unit =
             "push 5";
             "call 0";
             "call print_i64";
-            "restore";
+            "reset";
             "ret";
         ] in
     assert ((get_instrs result) = expected)
@@ -675,11 +675,11 @@ let test_8 () : unit =
                     BinOp (AddI64, BinOp (AddI64, Var "x", Var "y"), Var "z")
                 );
                 IfElse (
-                    BinOp (CmpEq, Var "x", LitInt 0),
+                    BinOp (Eq, Var "x", LitInt 0),
                     [Return [Var "x"; Var "y"]],
                     [
                         If (
-                            BinOp (CmpEq, LitInt 0, Var "y"),
+                            BinOp (Eq, LitInt 0, Var "y"),
                             [
                                 Return [
                                     Var "y";
@@ -698,48 +698,48 @@ let test_8 () : unit =
         [
             "save";
             "frame 5";
-            "rot 4";
-            "rot 4";
-            "push _";
-            "load 2";
-            "load 3";
+            "bury 4";
+            "bury 4";
+            "rsrv 1";
+            "copy 2";
+            "copy 3";
             "addi";
-            "load 4";
+            "copy 4";
             "addi";
             "store 5";
-            "load 2";
+            "copy 2";
             "push 0";
-            "cmpeq";
+            "eq";
             "jpz 9";
-            "load 2";
-            "load 3";
-            "rot 7";
-            "rot 7";
+            "copy 2";
+            "copy 3";
+            "bury 7";
+            "bury 7";
             "drop 4";
-            "restore";
+            "reset";
             "ret";
             "jump 14";
             "push 0";
-            "load 3";
-            "cmpeq";
+            "copy 3";
+            "eq";
             "jpz 10";
-            "load 3";
-            "load 2";
-            "load 4";
+            "copy 3";
+            "copy 2";
+            "copy 4";
             "addi";
-            "rot 7";
-            "rot 7";
+            "bury 7";
+            "bury 7";
             "drop 4";
-            "restore";
+            "reset";
             "ret";
             "push 1";
-            "load 2";
+            "copy 2";
             "addi";
-            "load 5";
-            "rot 7";
-            "rot 7";
+            "copy 5";
+            "bury 7";
+            "bury 7";
             "drop 4";
-            "restore";
+            "reset";
             "ret";
         ] in
     assert ((get_instrs result) = expected)
