@@ -23,7 +23,7 @@ export FLAGS=(
     -strict-formats
     -strict-sequence
     -unboxed-types
-    -w +1..67
+    -w "+1..67-4"
 )
 export LIBS=(
     str.cma
