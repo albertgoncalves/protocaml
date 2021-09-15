@@ -23,5 +23,5 @@ let rec fibs : int t =
 
 let () : unit =
     let x : int = head (drop 50 fibs) in
-    assert (x = 12586269025);
-    Printf.printf "%d\n%!" x
+    Printf.printf "%d\n%!" x;
+    assert (x = 12586269025)
