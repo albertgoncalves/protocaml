@@ -1,7 +1,7 @@
 with import <nixpkgs> {};
 mkShell {
     buildInputs = [
-        (with ocaml-ng.ocamlPackages_4_12; [
+        (with ocaml-ng.ocamlPackages; [
             benchmark
             ocaml
             ocp-indent
@@ -11,7 +11,7 @@ mkShell {
     ];
     shellHook = ''
         export BENCHMARK_CMA_PATH=$(
-            find ${ocaml-ng.ocamlPackages_4_12.benchmark} \
+            find ${ocaml-ng.ocamlPackages.benchmark} \
                 -name "benchmark.cma" \
                 -printf "%h"
         )
