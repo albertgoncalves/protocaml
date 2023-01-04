@@ -1,5 +1,3 @@
-module Lazy = CamlinternalLazy
-
 type 'a t = Cons of 'a * ('a t Lazy.t)
 
 let head (Cons (x, _) : 'a t) : 'a = x
