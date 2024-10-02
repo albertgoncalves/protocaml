@@ -19,6 +19,8 @@ export FLAGS=(
     -ccopt "-static"
     -g
     -I "$BENCHMARK_CMA_PATH"
+    -I +str
+    -I +unix
     -nolabels
     -strict-formats
     -strict-sequence
