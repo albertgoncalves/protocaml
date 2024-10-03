@@ -35,28 +35,23 @@ export LIBS=(
 export OCAMLRUNPARAM="a=0,b,c,o=80"
 
 runo () {
-    handle=$(echo "$1" | sed 's/^[a-z\/]*\/\(.*\)\.[a-z]*$/\1/')
-    pwd_=$PWD
+    handle=$(basename "${1%%.*}")
+    args=("$@")
+
     ocp-indent "$1" > tmp.ml
     if diff "$1" tmp.ml > /dev/null 2>&1; then
         rm tmp.ml
     else
         mv tmp.ml "$1"
     fi
+
     cp "$1" "$WD/build/$handle.ml"
-    (
+    if $(
         cd "$WD/build" || return
-        ocamlc "${FLAGS[@]}" "${LIBS[@]}" -o "$WD/bin/$handle" "$handle.ml" \
-            || return
-        cd "$pwd_" || return
-        if [ -n "$3" ]; then
-            "$WD/bin/$handle" "$2" "$3"
-        elif [ -n "$2" ]; then
-            "$WD/bin/$handle" "$2"
-        else
-            "$WD/bin/$handle"
-        fi
-    )
+        ocamlc "${FLAGS[@]}" "${LIBS[@]}" -o "$WD/bin/$handle" "$handle.ml"
+    ); then
+        "$WD/bin/${handle}" "${args[@]:1}"
+    fi
 }
 
 export -f runo
