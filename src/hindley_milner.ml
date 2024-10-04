@@ -24,18 +24,22 @@ let rec term_to_string =
       (term_to_string usage)
 
 type type' =
-  | TypeVariable of { id : int; mutable instance : type' option }
+  | TypeVariable of int
   | TypeOperator of (string * type' list)
 
-let rec type_to_string : type' -> string =
+let rec type_to_string (map : (int, type') Hashtbl.t) : type' -> string =
   function
-  | TypeVariable { instance = Some instance; _ } -> type_to_string instance
-  | TypeVariable { id; instance = None } -> Printf.sprintf "__%d__" id
+  | TypeVariable id ->
+    (
+      match Hashtbl.find_opt map id with
+      | Some instance -> type_to_string map instance
+      | None -> Printf.sprintf "__%d__" id
+    )
   | TypeOperator (op_name, []) -> op_name
   | TypeOperator (op_name, [a; b]) ->
-    Printf.sprintf "(%s %s %s)" (type_to_string a) op_name (type_to_string b)
+    Printf.sprintf "(%s %s %s)" (type_to_string map a) op_name (type_to_string map b)
   | TypeOperator (op_name, types) ->
-    Printf.sprintf "%s %s" op_name @@ String.concat " " @@ List.map type_to_string types
+    Printf.sprintf "%s %s" op_name @@ String.concat " " @@ List.map (type_to_string map) types
 
 let int_type : type' =
   TypeOperator ("int", [])
@@ -48,7 +52,7 @@ let fun_type (from_type : type') (to_type : type') : type' =
 
 module TypeSet =
   Set.Make (struct
-    type t = type'
+    type t = int
     let compare = compare
   end)
 
@@ -57,27 +61,35 @@ let fail (msg : string) : 'a =
 
 let next_variable_id : int ref = ref 0
 
-let make_variable () : type' =
-  let new_var = TypeVariable { id = !next_variable_id; instance = None } in
+let make_variable () : (type' * int) =
+  let id = !next_variable_id in
+  let new_var = TypeVariable id in
   incr next_variable_id;
-  new_var
+  (new_var, id)
 
-let rec prune : type' -> type' =
+let rec prune (map : (int, type') Hashtbl.t): type' -> type' =
   function
-  | TypeVariable ({ instance = Some instance; _ } as var) ->
-    let new_instance = prune instance in
-    var.instance <- Some new_instance;
-    new_instance
+  | TypeVariable id as t0 ->
+    (
+      match Hashtbl.find_opt map id with
+      | None -> t0
+      | Some t1 ->
+        (
+          let new_instance = prune map t1 in
+          Hashtbl.add map id new_instance;
+          new_instance
+        )
+    )
   | t -> t
 
-let rec occurs_in_type (var : type') (t : type') : bool =
-  match prune t with
-  | pruned when pruned = var -> true
-  | TypeOperator (_, types) -> occurs_in var types
+let rec occurs_in_type (map : (int, type') Hashtbl.t) (var : int) (t : type') : bool =
+  match prune map t with
+  | TypeVariable id when id = var -> true
+  | TypeOperator (_, types) -> occurs_in map var types
   | _ -> false
 
-and occurs_in (t : type') : type' list -> bool =
-  List.exists (occurs_in_type t)
+and occurs_in (map : (int, type') Hashtbl.t) (t : int) : type' list -> bool =
+  List.exists (occurs_in_type map t)
 
 let is_integer_literal (name : string) : bool =
   try
@@ -88,20 +100,20 @@ let is_integer_literal (name : string) : bool =
   with
     Failure _ -> false
 
-let is_generic (var : type') (non_generic : TypeSet.t) : bool =
-  not @@ occurs_in var @@ TypeSet.to_list non_generic
+let is_generic (map : (int, type') Hashtbl.t) (var : int) (non_generic : TypeSet.t) : bool =
+  not @@ occurs_in map var @@ List.map (fun id -> TypeVariable id) @@ TypeSet.to_list non_generic
 
-let fresh (non_generic : TypeSet.t) : type' -> type' =
-  let table : (type', type') Hashtbl.t = Hashtbl.create 8 in
+let fresh (map : (int, type') Hashtbl.t) (non_generic : TypeSet.t) : type' -> type' =
+  let table : (int, type') Hashtbl.t = Hashtbl.create 8 in
   let rec loop (t : type') : type' =
-    match prune t with
-    | TypeVariable _ as p ->
-      if is_generic p non_generic then
-        match Hashtbl.find_opt table p with
+    match prune map t with
+    | TypeVariable id as p ->
+      if is_generic map id non_generic then
+        match Hashtbl.find_opt table id with
         | None ->
           (
-            let new_var = make_variable () in
-            ignore @@ Hashtbl.add table p new_var;
+            let new_var = fst @@ make_variable () in
+            Hashtbl.add table id new_var;
             new_var
           )
         | Some var -> var
@@ -111,74 +123,79 @@ let fresh (non_generic : TypeSet.t) : type' -> type' =
   in
   loop
 
-let get_type (name : string) (env : (string * type') list) (non_generic : TypeSet.t) : type' =
+let get_type (map : (int, type') Hashtbl.t) (name : string) (env : (string * type') list)
+    (non_generic : TypeSet.t) : type' =
   match List.find_opt (fun (s, _) -> s = name) env with
-  | Some (_, var) -> fresh non_generic var
+  | Some (_, var) -> fresh map non_generic var
   | None ->
     if is_integer_literal name then
       int_type
     else
       fail @@ "Undefined symbol " ^ name
 
-let rec unify (t1 : type') (t2 : type') : unit =
-  match (prune t1, prune t2) with
-  | ((TypeVariable var as a), b) | (b, (TypeVariable var as a)) ->
+let rec unify (map : (int, type') Hashtbl.t) (t1 : type') (t2 : type') : unit =
+  match (prune map t1, prune map t2) with
+  | ((TypeVariable id as a), b) | (b, (TypeVariable id as a)) ->
     if a <> b then (
-      if occurs_in_type a b then (
+      if occurs_in_type map id b then (
         fail "Recursive unification"
       );
-      var.instance <- Some b
+      Hashtbl.add map id b;
     )
   | ((TypeOperator (name1, types1) as a), (TypeOperator (name2, types2) as b)) ->
     if (name1 <> name2 || List.length types1 <> List.length types2) then (
-      fail @@ Printf.sprintf "Type mismatch %s != %s" (type_to_string a) (type_to_string b)
+      fail @@ Printf.sprintf "Type mismatch %s != %s" (type_to_string map a) (type_to_string map b)
     );
-    List.iter2 unify types1 types2
+    List.iter2 (unify map) types1 types2
 
-let rec analyse (term : term) (env : (string * type') list) (non_generic : TypeSet.t) : type' =
+let rec analyse (map : (int, type') Hashtbl.t) (term : term) (env : (string * type') list)
+    (non_generic : TypeSet.t) : type' =
   match term with
-  | Ident name -> get_type name env non_generic
+  | Ident name -> get_type map name env non_generic
   | Apply (fn, arg) ->
-    let fun_ty = analyse fn env non_generic in
-    let arg_ty = analyse arg env non_generic in
-    let ret_ty = make_variable () in
-    unify (fun_type arg_ty ret_ty) fun_ty;
+    let fun_ty = analyse map fn env non_generic in
+    let arg_ty = analyse map arg env non_generic in
+    let ret_ty = fst @@ make_variable () in
+    unify map (fun_type arg_ty ret_ty) fun_ty;
     ret_ty
   | Lambda (arg, body) ->
-    let arg_ty = make_variable () in
-    let ret_ty = analyse body ((arg, arg_ty) :: env) (TypeSet.add arg_ty non_generic) in
+    let (arg_ty, arg_id) = make_variable () in
+    let ret_ty = analyse map body ((arg, arg_ty) :: env) (TypeSet.add arg_id non_generic) in
     fun_type arg_ty ret_ty
   | Let (ident, value, usage) ->
-    analyse usage ((ident, analyse value env non_generic) :: env) non_generic
+    analyse map usage ((ident, analyse map value env non_generic) :: env) non_generic
   | LetRecs (pairs, usage) ->
     let (env'', non_generic'', pairs'') =
       List.fold_left
         (fun (env', non_generic', pairs') (ident, value) ->
-           let new_ty = make_variable () in
-           ((ident, new_ty) :: env', TypeSet.add new_ty non_generic', (value, new_ty) :: pairs'))
+           let (new_ty, new_id) = make_variable () in
+           ((ident, new_ty) :: env', TypeSet.add new_id non_generic', (value, new_ty) :: pairs'))
         (env, non_generic, [])
         pairs
     in
     (
-      List.iter (fun (value, new_ty) -> unify new_ty (analyse value env'' non_generic'')) pairs'';
-      analyse usage env'' non_generic
+      List.iter
+        (fun (value, new_ty) -> unify map new_ty (analyse map value env'' non_generic''))
+        pairs'';
+      analyse map usage env'' non_generic
     )
 
 let try_exp (env : (string * type') list) (id : int) (term : term) : unit =
+  let map : (int, type') Hashtbl.t = Hashtbl.create 16 in
   next_variable_id := id;
   Printf.printf
     "%s : %s\n"
     (term_to_string term)
     (try
-       type_to_string (analyse term env TypeSet.empty)
+       type_to_string map (analyse map term env TypeSet.empty)
      with
        Failure msg -> msg)
 
 let () =
-  let var1 = make_variable () in
-  let var2 = make_variable () in
+  let var1 = fst @@ make_variable () in
+  let var2 = fst @@ make_variable () in
   let pair_ty = TypeOperator ("*", [var1; var2]) in
-  let var3 = make_variable () in
+  let var3 = fst @@ make_variable () in
 
   let env =
     [("pair", fun_type var1 (fun_type var2 pair_ty));
