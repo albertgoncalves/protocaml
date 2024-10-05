@@ -1,56 +1,60 @@
 (* NOTE: See `https://gist.github.com/kseo/9383472`. *)
 
-type term =
+type term' =
   | Ident of string
-  | Lambda of string * term
-  | Apply of term * term
-  | Let of string * term * term
-  | LetRecs of (string * term) list * term
+  | Lambda of string * term'
+  | Apply of term' * term'
+  | Let of string * term' * term'
+  | LetRecs of (string * term') list * term'
 
 let rec term_to_string =
   function
   | Ident name -> name
   | Lambda (arg, body) -> Printf.sprintf "\\%s -> %s" arg (term_to_string body)
   | Apply (fn, arg) -> Printf.sprintf "(%s %s)" (term_to_string fn) (term_to_string arg)
-  | Let (ident, value, usage) ->
-    Printf.sprintf "let %s = %s in %s" ident (term_to_string value) (term_to_string usage)
-  | LetRecs (pairs, usage) ->
+  | Let (ident, value, body) ->
+    Printf.sprintf "let %s = %s in %s" ident (term_to_string value) (term_to_string body)
+  | LetRecs (pairs, body) ->
     Printf.sprintf
       "let rec %s in %s"
       (String.concat " and "
        @@ List.map
          (fun (ident, value) -> Printf.sprintf "%s = %s" ident (term_to_string value))
          pairs)
-      (term_to_string usage)
+      (term_to_string body)
 
 type type' =
-  | TypeVariable of int
-  | TypeOperator of (string * type' list)
+  | Var of int
+  | Op of (string * type' list)
 
-let rec type_to_string (map : (int, type') Hashtbl.t) : type' -> string =
+let rec type_to_string (links : (int, type') Hashtbl.t) : type' -> string =
   function
-  | TypeVariable id ->
+  | Var k ->
     (
-      match Hashtbl.find_opt map id with
-      | Some instance -> type_to_string map instance
-      | None -> Printf.sprintf "__%d__" id
+      match Hashtbl.find_opt links k with
+      | Some instance -> type_to_string links instance
+      | None -> Printf.sprintf "__%d__" k
     )
-  | TypeOperator (op_name, []) -> op_name
-  | TypeOperator (op_name, [a; b]) ->
-    Printf.sprintf "(%s %s %s)" (type_to_string map a) op_name (type_to_string map b)
-  | TypeOperator (op_name, types) ->
-    Printf.sprintf "%s %s" op_name @@ String.concat " " @@ List.map (type_to_string map) types
+  | Op (op_name, []) -> op_name
+  | Op (op_name, [a; b]) ->
+    Printf.sprintf "(%s %s %s)" (type_to_string links a) op_name (type_to_string links b)
+  | Op (op_name, types) ->
+    Printf.sprintf "%s %s" op_name @@ String.concat " " @@ List.map (type_to_string links) types
 
-let int_type : type' =
-  TypeOperator ("int", [])
+type links' = (int, type') Hashtbl.t
 
-let bool_type : type' =
-  TypeOperator ("bool", [])
+type env' = (string * type') list
 
-let fun_type (from_type : type') (to_type : type') : type' =
-  TypeOperator ("->", [from_type; to_type])
+let op_int : type' =
+  Op ("int", [])
 
-module TypeSet =
+let op_bool : type' =
+  Op ("bool", [])
+
+let op_fn (from_type : type') (to_type : type') : type' =
+  Op ("->", [from_type; to_type])
+
+module IdSet =
   Set.Make (struct
     type t = int
     let compare = compare
@@ -59,37 +63,38 @@ module TypeSet =
 let fail (msg : string) : 'a =
   raise @@ Failure msg
 
-let next_variable_id : int ref = ref 0
+let global_k : int ref = ref 0
 
-let make_variable () : (type' * int) =
-  let id = !next_variable_id in
-  let new_var = TypeVariable id in
-  incr next_variable_id;
-  (new_var, id)
+let next_var () : (int * type') =
+  let k = !global_k in
+  let type_ = Var k in
+  incr global_k;
+  (k, type_)
 
-let rec prune (map : (int, type') Hashtbl.t): type' -> type' =
+let rec prune (links : links'): type' -> type' =
   function
-  | TypeVariable id as t0 ->
+  | Var k as type_ ->
     (
-      match Hashtbl.find_opt map id with
-      | None -> t0
-      | Some t1 ->
+      match Hashtbl.find_opt links k with
+      | None -> type_
+      | Some type_ ->
         (
-          let new_instance = prune map t1 in
-          Hashtbl.add map id new_instance;
-          new_instance
+          Hashtbl.remove links k;
+          let type_ = prune links type_ in
+          Hashtbl.add links k type_;
+          type_
         )
     )
-  | t -> t
+  | type_ -> type_
 
-let rec occurs_in_type (map : (int, type') Hashtbl.t) (var : int) (t : type') : bool =
-  match prune map t with
-  | TypeVariable id when id = var -> true
-  | TypeOperator (_, types) -> occurs_in map var types
-  | _ -> false
+let rec occurs (links : links') (other : int) (type_ : type') : bool =
+  match prune links type_ with
+  | Var k when k = other -> true
+  | Var _ -> false
+  | Op (_, types) -> any_occurs links other types
 
-and occurs_in (map : (int, type') Hashtbl.t) (t : int) : type' list -> bool =
-  List.exists (occurs_in_type map t)
+and any_occurs (links : links') (other : int) : type' list -> bool =
+  List.exists @@ occurs links other
 
 let is_integer_literal (name : string) : bool =
   try
@@ -100,114 +105,120 @@ let is_integer_literal (name : string) : bool =
   with
     Failure _ -> false
 
-let is_generic (map : (int, type') Hashtbl.t) (var : int) (non_generic : TypeSet.t) : bool =
-  not @@ occurs_in map var @@ List.map (fun id -> TypeVariable id) @@ TypeSet.to_list non_generic
+let is_generic (links : links') (other : int) (non_generics : IdSet.t) : bool =
+  not @@ any_occurs links other @@ List.map (fun k -> Var k) @@ IdSet.to_list non_generics
 
-let fresh (map : (int, type') Hashtbl.t) (non_generic : TypeSet.t) : type' -> type' =
-  let table : (int, type') Hashtbl.t = Hashtbl.create 8 in
-  let rec loop (t : type') : type' =
-    match prune map t with
-    | TypeVariable id as p ->
-      if is_generic map id non_generic then
-        match Hashtbl.find_opt table id with
+let fresh (links : (int, type') Hashtbl.t) (non_generics : IdSet.t) : type' -> type' =
+  let generics : (int, int) Hashtbl.t = Hashtbl.create 8 in
+  let rec loop (type_ : type') : type' =
+    match prune links type_ with
+    | Var k as type_ ->
+      if is_generic links k non_generics then
+        match Hashtbl.find_opt generics k with
+        | Some k -> Var k
         | None ->
           (
-            let new_var = fst @@ make_variable () in
-            Hashtbl.add table id new_var;
-            new_var
+            let (other, type_) = next_var () in
+            Hashtbl.add generics k other;
+            type_
           )
-        | Some var -> var
       else
-        p
-    | TypeOperator (op_name, types) -> TypeOperator (op_name, List.map loop types)
+        type_
+    | Op (op, types) -> Op (op, List.map loop types)
   in
   loop
 
-let get_type (map : (int, type') Hashtbl.t) (name : string) (env : (string * type') list)
-    (non_generic : TypeSet.t) : type' =
-  match List.find_opt (fun (s, _) -> s = name) env with
-  | Some (_, var) -> fresh map non_generic var
+let ident_to_type (links : links') (ident : string) (env : env') (non_generics : IdSet.t) : type' =
+  match List.find_opt (fun (other, _) -> ident = other) env with
+  | Some (_, type_) -> fresh links non_generics type_
   | None ->
-    if is_integer_literal name then
-      int_type
+    if is_integer_literal ident then
+      op_int
     else
-      fail @@ "Undefined symbol " ^ name
+      fail @@ "Undefined symbol " ^ ident
 
-let rec unify (map : (int, type') Hashtbl.t) (t1 : type') (t2 : type') : unit =
-  match (prune map t1, prune map t2) with
-  | ((TypeVariable id as a), b) | (b, (TypeVariable id as a)) ->
-    if a <> b then (
-      if occurs_in_type map id b then (
+let rec unify (links : links') (type0 : type') (type1 : type') : unit =
+  match (prune links type0, prune links type1) with
+  | ((Var k as type0), type1) | (type1, (Var k as type0)) ->
+    if type0 <> type1 then (
+      if occurs links k type1 then (
         fail "Recursive unification"
       );
-      Hashtbl.add map id b;
+      Hashtbl.add links k type1;
     )
-  | ((TypeOperator (name1, types1) as a), (TypeOperator (name2, types2) as b)) ->
-    if (name1 <> name2 || List.length types1 <> List.length types2) then (
-      fail @@ Printf.sprintf "Type mismatch %s != %s" (type_to_string map a) (type_to_string map b)
-    );
-    List.iter2 (unify map) types1 types2
+  | (Op (op0, types0), Op (op1, types1)) ->
+    (
+      if (op0 <> op1 || List.length types0 <> List.length types1) then (
+        fail @@ Printf.sprintf
+          "Type mismatch %s != %s"
+          (type_to_string links type0)
+          (type_to_string links type1)
+      );
+      List.iter2 (unify links) types0 types1
+    )
 
-let rec analyse (map : (int, type') Hashtbl.t) (term : term) (env : (string * type') list)
-    (non_generic : TypeSet.t) : type' =
+let rec term_to_type (links : links') (term : term') (env : env') (non_generics : IdSet.t) : type' =
   match term with
-  | Ident name -> get_type map name env non_generic
+  | Ident ident -> ident_to_type links ident env non_generics
   | Apply (fn, arg) ->
-    let fun_ty = analyse map fn env non_generic in
-    let arg_ty = analyse map arg env non_generic in
-    let ret_ty = fst @@ make_variable () in
-    unify map (fun_type arg_ty ret_ty) fun_ty;
-    ret_ty
+    (
+      let fn_type = term_to_type links fn env non_generics in
+      let arg_type = (term_to_type links arg env non_generics) in
+      let ret_type = snd @@ next_var () in
+      unify links (op_fn arg_type ret_type) fn_type;
+      ret_type
+    )
   | Lambda (arg, body) ->
-    let (arg_ty, arg_id) = make_variable () in
-    let ret_ty = analyse map body ((arg, arg_ty) :: env) (TypeSet.add arg_id non_generic) in
-    fun_type arg_ty ret_ty
-  | Let (ident, value, usage) ->
-    analyse map usage ((ident, analyse map value env non_generic) :: env) non_generic
-  | LetRecs (pairs, usage) ->
-    let (env'', non_generic'', pairs'') =
+    let (arg_k, arg_type) = next_var () in
+    op_fn arg_type
+    @@ term_to_type links body ((arg, arg_type) :: env)
+    @@ IdSet.add arg_k non_generics
+  | Let (ident, value, body) ->
+    term_to_type links body ((ident, term_to_type links value env non_generics) :: env) non_generics
+  | LetRecs (pairs, body) ->
+    let (rec_env, rec_non_generics, pairs) =
       List.fold_left
-        (fun (env', non_generic', pairs') (ident, value) ->
-           let (new_ty, new_id) = make_variable () in
-           ((ident, new_ty) :: env', TypeSet.add new_id non_generic', (value, new_ty) :: pairs'))
-        (env, non_generic, [])
+        (fun (env, non_generics, pairs) (ident, value) ->
+           let (k, type_) = next_var () in
+           ((ident, type_) :: env, IdSet.add k non_generics, (value, type_) :: pairs))
+        (env, non_generics, [])
         pairs
     in
     (
       List.iter
-        (fun (value, new_ty) -> unify map new_ty (analyse map value env'' non_generic''))
-        pairs'';
-      analyse map usage env'' non_generic
+        (fun (value, type_) -> unify links type_ @@ term_to_type links value rec_env rec_non_generics)
+        pairs;
+      term_to_type links body rec_env non_generics
     )
 
-let try_exp (env : (string * type') list) (id : int) (term : term) : unit =
-  let map : (int, type') Hashtbl.t = Hashtbl.create 16 in
-  next_variable_id := id;
+let try_term_to_type (env : env') (k : int) (term : term') : unit =
+  let links : links' = Hashtbl.create 16 in
+  global_k := k;
   Printf.printf
     "%s : %s\n"
     (term_to_string term)
     (try
-       type_to_string map (analyse map term env TypeSet.empty)
+       type_to_string links (term_to_type links term env IdSet.empty)
      with
        Failure msg -> msg)
 
 let () =
-  let var1 = fst @@ make_variable () in
-  let var2 = fst @@ make_variable () in
-  let pair_ty = TypeOperator ("*", [var1; var2]) in
-  let var3 = fst @@ make_variable () in
+  let var0 = snd @@ next_var () in
+  let var1 = snd @@ next_var () in
+  let pair_ty = Op ("*", [var0; var1]) in
+  let var2 = snd @@ next_var () in
 
   let env =
-    [("pair", fun_type var1 (fun_type var2 pair_ty));
-     ("true", bool_type);
-     ("false", bool_type);
-     ("cond", fun_type bool_type (fun_type var3 (fun_type var3 var3)));
-     ("zero", fun_type int_type bool_type);
-     ("pred", fun_type int_type int_type);
-     ("times", fun_type int_type (fun_type int_type int_type))]
+    [("pair", op_fn var0 (op_fn var1 pair_ty));
+     ("true", op_bool);
+     ("false", op_bool);
+     ("cond", op_fn op_bool (op_fn var2 (op_fn var2 var2)));
+     ("zero", op_fn op_int op_bool);
+     ("pred", op_fn op_int op_int);
+     ("times", op_fn op_int (op_fn op_int op_int))]
   in
 
-  List.iter (try_exp env !next_variable_id)
+  List.iter (try_term_to_type env !global_k)
     [LetRecs
        ([("factorial",
           Lambda
