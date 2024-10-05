@@ -137,24 +137,25 @@ let ident_to_type (links : links') (ident : string) (env : env') (non_generics :
     else
       fail @@ "Undefined symbol " ^ ident
 
-let rec unify (links : links') (type0 : type') (type1 : type') : unit =
-  match (prune links type0, prune links type1) with
-  | ((Var k as type0), type1) | (type1, (Var k as type0)) ->
-    if type0 <> type1 then (
-      if occurs links k type1 then (
+let rec unify (links : links') (left_type : type') (right_type : type') : unit =
+  match (prune links left_type, prune links right_type) with
+  | (Var left_k, Var right_k) when left_k = right_k -> ()
+  | (Var k, right_type) | (right_type, Var k) ->
+    (
+      if occurs links k right_type then (
         fail "Recursive unification"
       );
-      Hashtbl.add links k type1;
+      Hashtbl.add links k right_type
     )
-  | (Op (op0, types0), Op (op1, types1)) ->
+  | (Op (left_op, left_types), Op (right_op, right_types)) ->
     (
-      if (op0 <> op1 || List.length types0 <> List.length types1) then (
+      if (left_op <> right_op || List.length left_types <> List.length right_types) then (
         fail @@ Printf.sprintf
           "Type mismatch %s != %s"
-          (type_to_string links type0)
-          (type_to_string links type1)
+          (type_to_string links left_type)
+          (type_to_string links right_type)
       );
-      List.iter2 (unify links) types0 types1
+      List.iter2 (unify links) left_types right_types
     )
 
 let rec term_to_type (links : links') (term : term') (env : env') (non_generics : IdSet.t) : type' =
