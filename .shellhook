@@ -16,21 +16,20 @@ for x in bin build out; do
 done
 
 export FLAGS=(
-    -ccopt "-static"
     -g
-    -I "$BENCHMARK_CMA_PATH"
+    -I "$BENCHMARK_CMXA_PATH"
     -I +str
     -I +unix
     -nolabels
     -strict-formats
     -strict-sequence
     -unboxed-types
-    -w "+1..67-4"
+    -w "+1..67-4-42"
 )
 export LIBS=(
-    str.cma
-    unix.cma
-    benchmark.cma
+    str.cmxa
+    unix.cmxa
+    benchmark.cmxa
 )
 export OCAMLRUNPARAM="a=0,b,c,o=80"
 
@@ -48,7 +47,7 @@ runo () {
     cp "$1" "$WD/build/$handle.ml"
     if $(
         cd "$WD/build" || return
-        ocamlc "${FLAGS[@]}" "${LIBS[@]}" -o "$WD/bin/$handle" "$handle.ml"
+        ocamlopt "${FLAGS[@]}" "${LIBS[@]}" -o "$WD/bin/$handle" "$handle.ml"
     ); then
         "$WD/bin/${handle}" "${args[@]:1}"
     fi

@@ -10,9 +10,9 @@ mkShell {
         xxd
     ];
     shellHook = ''
-        export BENCHMARK_CMA_PATH=$(
+        export BENCHMARK_CMXA_PATH=$(
             find ${ocaml-ng.ocamlPackages.benchmark} \
-                -name "benchmark.cma" \
+                -name "benchmark.cmxa" \
                 -printf "%h"
         )
         . .shellhook
