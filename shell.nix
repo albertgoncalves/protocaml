@@ -6,6 +6,7 @@ mkShell {
             ocaml
             ocp-indent
         ])
+        nodejs
         shellcheck
         xxd
     ];
