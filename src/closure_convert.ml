@@ -139,6 +139,19 @@ let rec transform_expr state =
             | stmt -> stmt
           ) in
 
+      let stmts =
+        (
+          List.filter_map
+            (
+              fun arg ->
+                if Hashtbl.mem child_state.idents.heap arg then
+                  Some (Set (Ident arg, Array [Ident arg]))
+                else
+                  None
+            )
+            args
+        ) @ stmts in
+
       parent_state.k <- child_state.k;
 
       let env =
@@ -226,6 +239,7 @@ let () =
   List.iter (fun ident -> Hashtbl.add state.idents.global ident ()) ["console.log"; "["; "+"];
 
   let expr =
+  (*
     Call (Func ([], [
         Let ("x", Int 0);
         Let ("y", Int (-1));
@@ -240,6 +254,45 @@ let () =
         Expr (Call (Ident "console.log", [Call (Ident "c", [])]));
         Expr (Call (Ident "console.log", [Call (Ident "c", [])]));
         Expr (Call (Ident "console.log", [Call (Call (Ident "counter", []), [])]));
+      ]), []) in
+  *)
+    Call (Func ([], [
+        Let ("counter", Func (["k"], [
+            Ret (Some (Call (Func ([], [
+                Let ("n", Int 0);
+                Ret (Some (Func ([], [
+                    Let ("m", Ident "n");
+                    Set (Ident "n", Call (Ident "+", [Ident "n"; Ident "k"]));
+                    Set (Ident "k", Call (Ident "+", [Ident "k"; Int 1]));
+                    Ret (Some (Ident "m"));
+                  ])))
+              ]), [])))
+          ]));
+        Let ("instances", Array [Call (Ident "counter", [Int 1]); Call (Ident "counter", [Int 2])]);
+        Expr (Call (Ident "console.log", [
+            Call (Call (Ident "[", [Ident "instances"; Int 0]), []);
+            Call (Call (Ident "[", [Ident "instances"; Int 1]), []);
+          ]));
+        Expr (Call (Ident "console.log", [
+            Call (Call (Ident "[", [Ident "instances"; Int 0]), []);
+            Call (Call (Ident "[", [Ident "instances"; Int 1]), []);
+          ]));
+        Expr (Call (Ident "console.log", [
+            Call (Call (Ident "[", [Ident "instances"; Int 0]), []);
+            Call (Call (Ident "[", [Ident "instances"; Int 1]), []);
+          ]));
+        Expr (Call (Ident "console.log", [
+            Call (Call (Ident "[", [Ident "instances"; Int 0]), []);
+            Call (Call (Ident "[", [Ident "instances"; Int 1]), []);
+          ]));
+        Expr (Call (Ident "console.log", [
+            Call (Call (Ident "[", [Ident "instances"; Int 0]), []);
+            Call (Call (Ident "[", [Ident "instances"; Int 1]), []);
+          ]));
+        Expr (Call (Ident "console.log", [
+            Call (Call (Ident "[", [Ident "instances"; Int 0]), []);
+            Call (Call (Ident "[", [Ident "instances"; Int 1]), []);
+          ]));
       ]), []) in
 
   let before = run_script expr state in
