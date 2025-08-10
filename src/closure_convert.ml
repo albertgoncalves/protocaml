@@ -145,15 +145,15 @@ let rec transform_expr state =
         Hashtbl.to_seq child_state.idents.escape
         |> Seq.map
           (
-            fun (ident, index) ->
+            fun (ident, child_index) ->
               if Hashtbl.mem parent_state.idents.local ident then
                 (
                   Hashtbl.replace parent_state.idents.heap ident ();
-                  (Ident ident, index)
+                  (Ident ident, child_index)
                 )
               else
-                let index = add_with_index parent_state.idents.escape ident in
-                (Call (Ident "[", [Ident "env"; Int index]), index)
+                let parent_index = add_with_index parent_state.idents.escape ident in
+                (Call (Ident "[", [Ident "env"; Int parent_index]), child_index)
           )
         |> List.of_seq
         |> List.sort (fun a b -> snd a - snd b)
