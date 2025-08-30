@@ -37,6 +37,10 @@ runo () {
     handle=$(basename "${1%%.*}")
     args=("$@")
 
+    if [ ! -f "$1" ]; then
+        return
+    fi
+
     ocp-indent "$1" > tmp.ml
     if diff "$1" tmp.ml > /dev/null 2>&1; then
         rm tmp.ml

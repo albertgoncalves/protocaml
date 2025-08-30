@@ -7,6 +7,7 @@ mkShell {
             ocp-indent
         ])
         nodejs
+        rlwrap
         shellcheck
         xxd
     ];
