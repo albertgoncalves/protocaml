@@ -35,16 +35,10 @@ let show_stack_value =
   | ValueInt int -> string_of_int int
   | ValueStr str -> show_str str
 
-let show_add =
-  "add"
-
-let show_neq =
-  "neq"
-
 let show_stack_op =
   function
-  | StackOpAdd -> show_add
-  | StackOpNeq -> show_neq
+  | StackOpAdd -> "add"
+  | StackOpNeq -> "neq"
 
 let print_stack_inst =
   function
@@ -63,6 +57,15 @@ let print_stack_inst =
 
 (* --- *)
 
+type x86_reg = Rax | Rbx | Rcx | Rdx | Rbp | Rsi | Rdi | R8 | R9 | R10 | R11 | R12 | R13 | R14 | R15
+
+let caller_saved_x86_regs = [|R11; R10; R9; R8; Rcx; Rdx; Rsi; Rax; Rdi|]
+let callee_saved_x86_regs = [|Rbx; R12; R13; R14; R15; Rbp|]
+let arg_x86_regs = [|Rdi; Rsi; Rdx; Rcx; R8; R9|]
+let ret_x86_regs = [|Rax; Rdx|]
+
+(* --- *)
+
 type reg_op =
   | RegOpMov
   | RegOpAdd
@@ -71,43 +74,44 @@ type reg_op =
 let show_reg_op =
   function
   | RegOpMov -> "mov"
-  | RegOpAdd -> show_add
-  | RegOpNeq -> show_neq
+  | RegOpAdd -> "add"
+  | RegOpNeq -> "cmp"
 
 type reg_dst =
-  | DstReg of int
-  | DstArg of int
-  | DstRet of int
+  | DstReg of x86_reg
 
 let show_reg =
-  Printf.sprintf "$%d"
-
-let show_arg =
-  Printf.sprintf "arg$%d"
-
-let show_ret =
-  Printf.sprintf "ret$%d"
+  function
+  | Rax -> "rax"
+  | Rbx -> "rbx"
+  | Rcx -> "rcx"
+  | Rdx -> "rdx"
+  | Rbp -> "rbp"
+  | Rsi -> "rsi"
+  | Rdi -> "rdi"
+  | R8 -> "r8"
+  | R9 -> "r9"
+  | R10 -> "r10"
+  | R11 -> "r11"
+  | R12 -> "r12"
+  | R13 -> "r13"
+  | R14 -> "r14"
+  | R15 -> "r15"
 
 let show_reg_dst =
   function
   | DstReg reg -> show_reg reg
-  | DstArg arg -> show_arg arg
-  | DstRet ret -> show_ret ret
 
 type reg_src =
   | SrcInt of int
-  | SrcReg of int
   | SrcStr of string
-  | SrcArg of int
-  | SrcRet of int
+  | SrcReg of x86_reg
 
 let show_reg_src =
   function
   | SrcInt int -> string_of_int int
-  | SrcReg reg -> show_reg reg
   | SrcStr str -> show_str str
-  | SrcArg arg -> show_arg arg
-  | SrcRet ret -> show_ret ret
+  | SrcReg reg -> show_reg reg
 
 type reg_inst =
   | RegLabel of string
@@ -117,6 +121,9 @@ type reg_inst =
 
   | RegJmp of string
   | RegJz of string
+
+  | RegPush of reg_src
+  | RegPop of reg_dst
 
   | RegBinOp of reg_op * reg_dst * reg_src
 
@@ -131,6 +138,9 @@ let print_reg_inst =
   | RegJz label -> Printf.printf "        jz      %s\n" label
   | RegHalt -> print_string "        halt\n"
 
+  | RegPush src-> Printf.printf "        push    %s\n" (show_reg_src src)
+  | RegPop dst -> Printf.printf "        pop     %s\n" (show_reg_dst dst)
+
   | RegBinOp (op, dst, src) ->
     Printf.printf "        %-8s%s, %s\n" (show_reg_op op) (show_reg_dst dst) (show_reg_src src)
 
@@ -138,12 +148,13 @@ let print_reg_inst =
 
 let allocate_reg stack =
   let rec loop i =
-    if Dynarray.exists ((=) i) stack then
+    let reg = caller_saved_x86_regs.(i) in
+    if Dynarray.exists ((=) reg) stack then
       loop (i + 1)
     else
       (
-        Dynarray.add_last stack i;
-        i
+        Dynarray.add_last stack reg;
+        reg
       )
   in
   loop 0
@@ -158,23 +169,21 @@ let stack_value_to_reg_src =
   | ValueInt int -> SrcInt int
   | ValueStr str -> SrcStr str
 
-let reg_mov dst src =
+let mov dst src =
   RegBinOp (RegOpMov, dst, src)
 
-let reg_to_arg stack args offset =
-  reg_mov (DstArg ((args - 1) - offset)) (SrcReg (Dynarray.pop_last stack))
+let pop_stack_to_reg stack regs n i =
+  let reg = regs.((n - 1) - i) in
+  assert (not (Dynarray.exists ((=) reg) stack));
+  mov (DstReg reg) (SrcReg (Dynarray.pop_last stack))
 
-let arg_to_reg stack args offset =
-  reg_mov (DstReg (allocate_reg stack)) (SrcArg ((args - 1) - offset))
-
-let reg_to_ret stack rets offset =
-  reg_mov (DstRet ((rets - 1) - offset)) (SrcReg (Dynarray.pop_last stack))
-
-let ret_to_reg stack rets offset =
-  reg_mov (DstReg (allocate_reg stack)) (SrcRet ((rets - 1) - offset))
+let push_reg_to_stack stack regs i =
+  let reg = regs.(i) in
+  assert (not (Dynarray.exists ((=) reg) stack));
+  mov (DstReg (allocate_reg stack)) (SrcReg reg)
 
 let stack_func_to_reg_func (label, args, stack_insts) =
-  let labels : (string, (int, int list) Either.t) Hashtbl.t = Hashtbl.create 4 in
+  let labels = Hashtbl.create 4 in
   for i = 0 to Array.length stack_insts - 1 do
     match stack_insts.(i) with
     | StackLabel label -> Hashtbl.add labels label (Either.left i)
@@ -199,10 +208,20 @@ let stack_func_to_reg_func (label, args, stack_insts) =
       )
     | StackCall (label, args, rets) ->
       (
-        let before = List.init args (reg_to_arg stack args) in
-        let after = List.init rets (ret_to_reg stack rets) in
+        let before = List.init args (pop_stack_to_reg stack arg_x86_regs args) in
+        let saved =
+          Dynarray.to_list
+            (Dynarray.filter (fun reg -> Array.mem reg caller_saved_x86_regs) stack) in
 
-        reg_insts.(i) <- before @ (RegCall label :: after);
+        reg_insts.(i) <-
+          List.concat
+            [
+              List.map (fun reg -> RegPush (SrcReg reg)) saved;
+              before;
+              [RegCall label];
+              List.init rets (push_reg_to_stack stack ret_x86_regs);
+              List.map (fun reg -> RegPop (DstReg reg)) saved;
+            ];
         loop stack (i + 1)
       )
     | StackSwap offset ->
@@ -269,7 +288,7 @@ let stack_func_to_reg_func (label, args, stack_insts) =
 
     | StackRet rets ->
       (
-        let before = List.init rets (reg_to_ret stack rets) in
+        let before = List.init rets (pop_stack_to_reg stack ret_x86_regs rets) in
         assert (Dynarray.length stack = 0);
         reg_insts.(i) <- before @ [RegRet]
       )
@@ -279,9 +298,9 @@ let stack_func_to_reg_func (label, args, stack_insts) =
         reg_insts.(i) <- [RegHalt]
       ) in
 
-  let stack : int Dynarray.t = Dynarray.create () in
+  let stack = Dynarray.create () in
 
-  let before = List.init args (arg_to_reg stack args) in
+  let before = List.init args (push_reg_to_stack stack arg_x86_regs) in
 
   loop stack 0;
 
